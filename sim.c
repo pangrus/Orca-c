@@ -532,9 +532,6 @@ BEGIN_OPERATOR(halt)
   LOWERCASE_REQUIRES_BANG;
   PORT(1, 0, OUT);
 END_OPERATOR
-
-
-
 BEGIN_OPERATOR(increment)
   LOWERCASE_REQUIRES_BANG;
   PORT(0, -1, IN | PARAM);
@@ -553,8 +550,6 @@ BEGIN_OPERATOR(increment)
   val = val % max;
   POKE(1, 0, glyph_with_case(glyph_of(val), gb));
 END_OPERATOR
-
-
 
 BEGIN_OPERATOR(jump)
   LOWERCASE_REQUIRES_BANG;
@@ -752,8 +747,6 @@ BEGIN_OPERATOR(teleport)
   LOWERCASE_REQUIRES_BANG;
   Isz out_x = (Isz)index_of(PEEK(0, -2));
   Isz out_y = (Isz)index_of(PEEK(0, -1)) + 1;
-  
-  
   PORT(0, -2, IN | PARAM); // x
   PORT(0, -1, IN | PARAM); // y
   PORT(0, 1, IN);
