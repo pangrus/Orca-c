@@ -9,18 +9,12 @@
 #include "vmio.h"
 #include <getopt.h>
 #include <locale.h>
-
 #define SOKOL_IMPL
 #include "sokol_time.h"
 #undef SOKOL_IMPL
 
 #ifdef FEAT_PORTMIDI
 #include <portmidi.h>
-#endif
-
-#if NCURSES_VERSION_PATCH < 20081122
-int _nc_has_mouse(void);
-#define has_mouse _nc_has_mouse
 #endif
 
 #define TIME_DEBUG 0
@@ -109,21 +103,23 @@ static attr_t term_attrs_of_cell(Glyph g, Mark m) {
   attr_t attr = A_normal;
   switch (gclass) {
   case Glyph_class_unknown:
-    attr = A_bold | fg_bg(C_red, C_natural);
+    attr = A_normal | fg_bg(C_black, C_natural);
     break;
   case Glyph_class_grid:
     attr = A_bold | fg_bg(C_black, C_natural);
     break;
   case Glyph_class_comment:
-    attr = A_dim | Cdef_normal;
+    attr = A_normal | Cdef_normal;
     break;
   case Glyph_class_uppercase:
-    attr = A_normal | fg_bg(C_black, C_cyan);
+    attr = A_normal | fg_bg(C_black, C_red);
     break;
   case Glyph_class_lowercase:
   case Glyph_class_movement:
+    attr = A_normal | fg_bg(C_red, C_natural);
+    break;
   case Glyph_class_numeric:
-    attr = A_bold | Cdef_normal;
+    attr = A_normal | Cdef_normal;
     break;
   case Glyph_class_bang:
     attr = A_bold | Cdef_normal;
@@ -132,21 +128,21 @@ static attr_t term_attrs_of_cell(Glyph g, Mark m) {
   if (gclass != Glyph_class_comment) {
     if ((m & (Mark_flag_lock | Mark_flag_input)) ==
         (Mark_flag_lock | Mark_flag_input)) {
-      // Standard locking input
-      attr = A_normal | Cdef_normal;
-    } else if ((m & Mark_flag_input) == Mark_flag_input) {
-      // Non-locking input
-      attr = A_normal | Cdef_normal;
-    } else if (m & Mark_flag_lock) {
-      // Locked only
-      attr = A_dim | Cdef_normal;
+        attr = A_normal | Cdef_normal; // Standard locking input
+    } 
+    else if ((m & Mark_flag_input) == Mark_flag_input) {
+    attr = A_dim | Cdef_normal; // Non-locking input
+    } 
+    else if (m & Mark_flag_lock) {
+      
+      attr = A_dim | Cdef_normal;  // Locked only
     }
   }
   if (m & Mark_flag_output) {
     attr = A_reverse;
   }
   if (m & Mark_flag_haste_input) {
-    attr = A_bold | fg_bg(C_cyan, C_natural);
+    attr = A_normal | fg_bg(C_red, C_natural);
   }
   return attr;
 }
@@ -206,7 +202,7 @@ staticni void draw_grid_cursor(WINDOW *win, int draw_y, int draw_x, int draw_h,
     return;
   if (draw_y >= draw_h || draw_x >= draw_w)
     return;
-  attr_t const curs_attr = A_reverse | A_bold | fg_bg(C_yellow, C_natural);
+  attr_t const curs_attr = A_reverse | A_normal | fg_bg(C_yellow, C_natural);
   if (offset_y <= cursor_y && offset_x <= cursor_x) {
     Usz cdraw_y = cursor_y - offset_y + (Usz)draw_y;
     Usz cdraw_x = cursor_x - offset_x + (Usz)draw_x;
@@ -214,7 +210,7 @@ staticni void draw_grid_cursor(WINDOW *win, int draw_y, int draw_x, int draw_h,
       Glyph beneath = gbuffer[cursor_y * field_w + cursor_x];
       char displayed;
       if (beneath == '.') {
-        displayed = is_playing ? '@' : '~';
+        displayed = is_playing ? '+' : '-';
       } else {
         displayed = beneath;
       }
@@ -2003,6 +1999,7 @@ enum {
   Main_menu_quit = 1,
   Main_menu_controls,
   Main_menu_opers_guide,
+  Main_menu_midi_guide,
   Main_menu_new,
   Main_menu_open,
   Main_menu_save,
@@ -2023,25 +2020,26 @@ static void push_main_menu(void) {
   Qmenu *qm = qmenu_create(Main_menu_id);
   qmenu_set_title(qm, "ORCA");
   qmenu_add_choice(qm, Main_menu_new, "New");
-  qmenu_add_choice(qm, Main_menu_open, "Open...");
+  qmenu_add_choice(qm, Main_menu_open, "Open");
   qmenu_add_choice(qm, Main_menu_save, "Save");
-  qmenu_add_choice(qm, Main_menu_save_as, "Save As...");
+  qmenu_add_choice(qm, Main_menu_save_as, "Save as");
   qmenu_add_spacer(qm);
-  qmenu_add_choice(qm, Main_menu_set_tempo, "Set BPM...");
-  qmenu_add_choice(qm, Main_menu_set_grid_dims, "Set Grid Size...");
-  qmenu_add_choice(qm, Main_menu_autofit_grid, "Auto-fit Grid");
+  qmenu_add_choice(qm, Main_menu_autofit_grid, "Automatic grid");
+  qmenu_add_choice(qm, Main_menu_cosmetics, "Appearance");
+  qmenu_add_choice(qm, Main_menu_set_grid_dims, "Grid settings");
   qmenu_add_spacer(qm);
-  qmenu_add_choice(qm, Main_menu_osc, "OSC Output...");
+  qmenu_add_choice(qm, Main_menu_set_tempo, "BPM settings");
 #ifdef FEAT_PORTMIDI
-  qmenu_add_choice(qm, Main_menu_choose_portmidi_output, "MIDI Output...");
+  qmenu_add_choice(qm, Main_menu_choose_portmidi_output, "MIDI settings");
 #endif
+  qmenu_add_choice(qm, Main_menu_playback, "CLOCK settings");
+  qmenu_add_choice(qm, Main_menu_osc, "OSC settings");
   qmenu_add_spacer(qm);
-  qmenu_add_choice(qm, Main_menu_playback, "Clock & Timing...");
-  qmenu_add_choice(qm, Main_menu_cosmetics, "Appearance...");
+  qmenu_add_choice(qm, Main_menu_opers_guide, "Operator list");
+  qmenu_add_choice(qm, Main_menu_controls, "Control list");
+  qmenu_add_choice(qm, Main_menu_midi_guide, "Midi CC list");
   qmenu_add_spacer(qm);
-  qmenu_add_choice(qm, Main_menu_controls, "Controls...");
-  qmenu_add_choice(qm, Main_menu_opers_guide, "Operators...");
-  qmenu_add_choice(qm, Main_menu_about, "About ORCA...");
+  qmenu_add_choice(qm, Main_menu_about, "About ORCA");
   qmenu_add_spacer(qm);
   qmenu_add_choice(qm, Main_menu_quit, "Quit");
   qmenu_push_to_nav(qm);
@@ -2057,16 +2055,16 @@ staticni void pop_qnav_if_main_menu(void) {
 static void push_confirm_new_file_menu(void) {
   Qmenu *qm = qmenu_create(Confirm_new_file_menu_id);
   qmenu_set_title(qm, "Are you sure?");
-  qmenu_add_choice(qm, Confirm_new_file_reject_id, "Cancel");
-  qmenu_add_choice(qm, Confirm_new_file_accept_id, "Create New File");
-  qmenu_push_to_nav(qm);
+    qmenu_add_choice(qm, Confirm_new_file_accept_id, "New file");
+    qmenu_add_choice(qm, Confirm_new_file_reject_id, "Cancel");
+   qmenu_push_to_nav(qm);
 }
 
 static void push_autofit_menu(void) {
   Qmenu *qm = qmenu_create(Autofit_menu_id);
-  qmenu_set_title(qm, "Auto-fit Grid");
-  qmenu_add_choice(qm, Autofit_nicely_id, "Nicely");
-  qmenu_add_choice(qm, Autofit_tightly_id, "Tightly");
+  qmenu_set_title(qm, "Automatic grid");
+  qmenu_add_choice(qm, Autofit_nicely_id, "With margins");
+  qmenu_add_choice(qm, Autofit_tightly_id, "Without margins");
   qmenu_push_to_nav(qm);
 }
 
@@ -2078,9 +2076,9 @@ enum {
 static void push_cosmetics_menu(void) {
   Qmenu *qm = qmenu_create(Cosmetics_menu_id);
   qmenu_set_title(qm, "Appearance");
-  qmenu_add_choice(qm, Cosmetics_soft_margins_id, "Margins...");
-  qmenu_add_choice(qm, Cosmetics_grid_dots_id, "Grid dots...");
-  qmenu_add_choice(qm, Cosmetics_grid_rulers_id, "Grid rulers...");
+  qmenu_add_choice(qm, Cosmetics_soft_margins_id, "Margins");
+  qmenu_add_choice(qm, Cosmetics_grid_dots_id, "Dots");
+  qmenu_add_choice(qm, Cosmetics_grid_rulers_id, "Rulers");
   qmenu_push_to_nav(qm);
 }
 static void push_soft_margins_form(int init_y, int init_x) {
@@ -2088,7 +2086,7 @@ static void push_soft_margins_form(int init_y, int init_x) {
   char buff[128];
   int snres = snprintf(buff, sizeof buff, "%dx%d", init_x, init_y);
   char const *inistr = snres > 0 && (Usz)snres < sizeof buff ? buff : "2x1";
-  qform_set_title(qf, "Set Margins");
+  qform_set_title(qf, "Margins");
   qform_add_text_line(qf, Single_form_item_id, inistr);
   qform_push_to_nav(qf);
 }
@@ -2110,10 +2108,10 @@ enum {
 static void push_osc_menu(bool output_enabled) {
   Qmenu *qm = qmenu_create(Osc_menu_id);
   qmenu_set_title(qm, "OSC Output");
-  qmenu_add_printf(qm, Osc_menu_output_enabledisable, "[%c] OSC Output Enabled",
+  qmenu_add_printf(qm, Osc_menu_output_enabledisable, "[%c] OSC Output",
                    output_enabled ? '*' : ' ');
-  qmenu_add_choice(qm, Osc_menu_output_address, "OSC Output Address...");
-  qmenu_add_choice(qm, Osc_menu_output_port, "OSC Output Port...");
+  qmenu_add_choice(qm, Osc_menu_output_address, "OSC Output Address");
+  qmenu_add_choice(qm, Osc_menu_output_port, "OSC Output Port");
   qmenu_push_to_nav(qm);
 }
 static void push_osc_output_address_form(char const *initial) {
@@ -2133,7 +2131,7 @@ enum {
 };
 static void push_playback_menu(bool midi_bclock_enabled) {
   Qmenu *qm = qmenu_create(Playback_menu_id);
-  qmenu_set_title(qm, "Clock & Timing");
+  qmenu_set_title(qm, "Clock");
   qmenu_add_printf(qm, Playback_menu_midi_bclock, "[%c] Send MIDI Beat Clock",
                    midi_bclock_enabled ? '*' : ' ');
   qmenu_push_to_nav(qm);
@@ -2141,12 +2139,12 @@ static void push_playback_menu(bool midi_bclock_enabled) {
 static void push_about_msg(void) {
   // clang-format off
   static char const* logo[] = {
-  "lqqqk|lqqqk|lqqqk|lqqqk",
-  "x   x|x   j|x    |lqqqu",
-  "mqqqj|m    |mqqqj|m   j",
+  "lqqqk lqqqq lqqqq lqqqk",
+  "x   x x     x     lqqqu", 
+  "mqqqj m     mqqqq mqqqj",
   };
   static char const* footer =
-  "Live Programming Environment";
+  "Pangrus edition";
   // clang-format on
   int rows = (int)ORCA_ARRAY_COUNTOF(logo);
   int cols = (int)strlen(logo[0]);
@@ -2180,35 +2178,35 @@ static void push_about_msg(void) {
   wmove(w, tpad + rows + sep, footer_left_pad);
   waddstr(w, footer);
 }
+
 static void push_controls_msg(void) {
   struct Ctrl_item {
     char const *input;
     char const *desc;
   };
   static struct Ctrl_item items[] = {
-      {"Ctrl+Q", "Quit"},
-      {"Arrow Keys", "Move Cursor"},
-      {"Ctrl+D or F1", "Open Main Menu"},
-      {"0-9, A-Z, a-z,", "Insert Character"},
-      {"! : % / = # *", NULL},
+      {"Arrow Keys", "Cursor movement"},
       {"Spacebar", "Play/Pause"},
-      {"Ctrl+Z or Ctrl+U", "Undo"},
-      {"Ctrl+X", "Cut"},
-      {"Ctrl+C", "Copy"},
-      {"Ctrl+V", "Paste"},
-      {"Ctrl+S", "Save"},
-      {"Ctrl+F", "Frame Step Forward"},
-      {"Ctrl+R", "Reset Frame Number"},
-      {"Ctrl+I or Insert", "Append/Overwrite Mode"},
-      // {"/", "Key Trigger Mode"},
-      {"' (quote)", "Rectangle Selection Mode"},
-      {"Shift+Arrow Keys", "Adjust Rectangle Selection"},
-      {"Alt+Arrow Keys", "Slide Selection"},
-      {"` (grave) or ~", "Slide Selection Mode"},
-      {"Escape", "Return to Normal Mode or Deselect"},
-      {"( ) _ + [ ] { }", "Adjust Grid Size and Rulers"},
-      {"< and >", "Adjust BPM"},
-      {"?", "Controls (this message)"},
+      {"Tab", "Insert mode"},
+      {"Ctrl+d", "Menu"},
+      {"Ctrl+z", "Undo"},
+      {"Ctrl+x", "Cut"},
+      {"Ctrl+c", "Copy"},
+      {"Ctrl+v", "Paste"},
+      {"Ctrl+s", "Save"},
+      {"Ctrl+f", "Advance frame"},
+      {"Ctrl+r", "Reset frame"},
+      {"Ctrl+p", "Midi CC list"},
+      {"Ctrl+q", "Quit"},
+      {"Shift+Arrow Keys", "Select block"},
+      //{"Alt+Arrow Keys", "Move block"},
+      {"'", "Block selection mode"},
+      {"~", "Block movement mode"},
+      {"Esc", "Normal mode"},
+      {"( ) + -", "Grid adjustment"},
+      {"[ ] { }", "Rulers adjustment"},
+      {"< >", "BPM adjustement"},
+      {"?", "Controls list"},
   };
   int w_input = 0;
   int w_desc = 0;
@@ -2243,46 +2241,48 @@ static void push_controls_msg(void) {
     }
   }
 }
+
 static void push_opers_guide_msg(void) {
   struct Guide_item {
     char glyph;
     char const *name;
     char const *desc;
   };
+  
   static struct Guide_item items[] = {
-      {'A', "add", "Outputs sum of inputs."},
-      {'B', "subtract", "Outputs difference of inputs."},
-      {'C', "clock", "Outputs modulo of frame."},
-      {'D', "delay", "Bangs on modulo of frame."},
-      {'E', "east", "Moves eastward, or bangs."},
-      {'F', "if", "Bangs if inputs are equal."},
-      {'G', "generator", "Writes operands with offset."},
-      {'H', "halt", "Halts southward operand."},
-      {'I', "increment", "Increments southward operand."},
-      {'J', "jumper", "Outputs northward operand."},
-      {'K', "konkat", "Reads multiple variables."},
-      {'L', "lesser", "Outputs smallest input."},
-      {'M', "multiply", "Outputs product of inputs."},
-      {'N', "north", "Moves Northward, or bangs."},
-      {'O', "read", "Reads operand with offset."},
-      {'P', "push", "Writes eastward operand."},
-      {'Q', "query", "Reads operands with offset."},
-      {'R', "random", "Outputs random value."},
-      {'S', "south", "Moves southward, or bangs."},
-      {'T', "track", "Reads eastward operand."},
-      {'U', "uclid", "Bangs on Euclidean rhythm."},
-      {'V', "variable", "Reads and writes variable."},
-      {'W', "west", "Moves westward, or bangs."},
-      {'X', "write", "Writes operand with offset."},
-      {'Y', "jymper", "Outputs westward operand."},
+      {'A', "Add", "Outputs sum of inputs."},
+      {'B', "suBtract", "Outputs subtraction of inputs."},
+      {'C', "Clock", "Outputs modulo of frame."},
+      {'D', "Delay", "Bangs on modulo of frame."},
+      {'E', "East", "Moves eastward, or bangs."},
+      {'F', "iF", "Bangs if inputs are equal."},
+      {'G', "Generator", "Writes operands with offset."},
+      {'H', "Halt", "Halts southward operand."},
+      {'I', "Increment", "Increments southward operand."},
+      {'J', "Jumper", "Outputs northward operand."},
+      {'K', "Konkat", "Reads multiple variables."},
+      {'L', "Lesser", "Outputs smallest input."},
+      {'M', "Multiply", "Outputs product of inputs."},
+      {'N', "North", "Moves northward, or bangs."},
+      {'O', "Offset", "Reads operand with offset."},
+      {'P', "Push", "Writes eastward operand."},
+      {'Q', "Query", "Reads operands with offset."},
+      {'R', "Random", "Outputs random value."},
+      {'S', "South", "Moves southward, or bangs."},
+      {'T', "Track", "Reads eastward operand."},
+      {'U', "eUclid", "Bangs on Euclidean rhythm."},
+      {'V', "Variable", "Reads and writes variable."},
+      {'W', "West", "Moves westward, or bangs."},
+      {'X', "teleport", "Writes operand with offset."},
+      {'Y', "jYmper", "Outputs westward operand."},
       {'Z', "lerp", "Transitions operand to target."},
       {'*', "bang", "Bangs neighboring operands."},
       {'#', "comment", "Halts line."},
       // {'*', "self", "Sends ORCA command."},
-      {':', "midi", "Sends MIDI note."},
-      {'!', "cc", "Sends MIDI control change."},
-      {'?', "pb", "Sends MIDI pitch bend."},
-      // {'%', "mono", "Sends MIDI monophonic note."},
+      {':', "midi", "Sends Midi note."},
+      {'!', "cc", "Sends Midi CC."},
+      {'?', "pb", "Sends Midi pitch bend."},
+      // {'%', "mono", "Sends Midi monophonic note."},
       {'=', "osc", "Sends OSC message."},
       {';', "udp", "Sends UDP message."},
   };
@@ -2295,9 +2295,84 @@ static void push_opers_guide_msg(void) {
     }
   }
   int left_pad = 1, mid_pad = 1, right_pad = 1;
-  int total_width = left_pad + 1 + mid_pad + w_desc + right_pad;
+  int total_width = left_pad + 13 + mid_pad + w_desc + right_pad;
   Qmsg *qm = qmsg_push(ORCA_ARRAY_COUNTOF(items), total_width);
   qmsg_set_title(qm, "Operators");
+  WINDOW *w = qmsg_window(qm);
+  for (int i = 0; i < (int)ORCA_ARRAY_COUNTOF(items); ++i) {
+    wmove(w, i, left_pad);
+    waddch(w, (chtype)items[i].glyph | A_bold);
+    wmove(w, i, left_pad + 1 + mid_pad);
+    wattrset(w, A_normal);
+    waddstr(w, items[i].name);
+    wmove(w, i, left_pad + 13 + mid_pad);
+
+    wattrset(w, A_normal);
+    waddstr(w, items[i].desc);
+  }
+}
+
+
+static void push_midi_guide_msg(void) {
+  struct Guide_item {
+    char glyph;
+    char const *name;
+    char const *desc;
+  };
+  
+
+  // Midi CC list guide
+  static struct Guide_item items[] = {
+      {'0', "00", "CC80  Macro knob 1 (Circuit)"},
+      {'1', "01", "CC81  Macro knob 2 (Circuit)"},
+      {'2', "02", "CC82  Macro knob 3 (Circuit)"},
+      {'3', "03", "CC83  Macro knob 4 (Circuit)"},
+      {'4', "04", "CC84  Macro knob 5 (Circuit)"},
+      {'5', "05", "CC85  Macro knob 6 (Circuit)"},
+      {'6', "06", "CC86  Macro knob 7 (Circuit)"},
+      {'7', "07", "CC87  Macro knob 8 (Circuit)"},
+      {'8', "08", "CC21  Osc 1 wavetable index (Circuit)"},
+      {'9', "09", "CC31  Osc 2 wavetable index (Circuit)"},
+      {'A', "10", "CC16  Accent (TB-03)"},
+      {'B', "11", "CC102 Slide (TB-03)"},
+      {'C', "12", "CC74  Cutoff frequency"},
+      {'D', "13", "CC18  Delay time (TB-03)"},
+      {'E', "14", "CC12  Envelope modulation (TB-03)"},
+      {'F', "15", "CC19  Delay feedback (TB-03)"},
+      {'G', "16", "CC14  Drum 1 pitch (Circuit)"},
+      {'H', "17", "CC34  Drum 2 pitch (Circuit)"},
+      {'I', "18", "CC46  Drum 3 pitch (Circuit)"},
+      {'J', "19", "CC55  Drum 4 pitch (Circuit)"},
+      {'K', "20", "CC15  Drum 1 decay (Circuit)"},
+      {'L', "21", "CC40  Drum 2 decay (Circuit)"},
+      {'M', "22", "CC47  Drum 3 decay (Circuit)"},
+      {'N', "23", "CC57  Drum 4 decay (Circuit)"},
+      {'O', "24", "CC17  Overdrive (TB-03)"},
+      {'P', "25", "CC18  Delay time (TB-03)"},
+      {'Q', "26", "CC3   Polyphony mode"},
+      {'R', "27", "CC71  Resonance"},
+      {'S', "28", "CC8   Drum 1 sample select (Circuit)"},
+      {'T', "29", "CC18  Drum 2 sample select (Circuit)"} ,
+      {'U', "30", "CC44  Drum 3 sample select (Circuit)"},
+      {'V', "31", "CC50  Drum 4 sample select (Circuit)"},
+      {'W', "32", "CC73  Attack"},
+      {'X', "33", "CC75  Decay"},
+      {'Y', "34", "CC70  Sustain"},
+      {'Z', "35", "CC72  Release"},
+  };
+
+  int w_desc = 0;
+  for (Usz i = 0; i < ORCA_ARRAY_COUNTOF(items); ++i) {
+    if (items[i].desc) {
+      int wr = (int)strlen(items[i].desc);
+      if (wr > w_desc)
+        w_desc = wr;
+    }
+  }
+  int left_pad = 1, mid_pad = 1, right_pad = 1;
+  int total_width = left_pad + 1 + mid_pad + w_desc + right_pad;
+  Qmsg *qm = qmsg_push(ORCA_ARRAY_COUNTOF(items), total_width);
+  qmsg_set_title(qm, "Midi CC");
   WINDOW *w = qmsg_window(qm);
   for (int i = 0; i < (int)ORCA_ARRAY_COUNTOF(items); ++i) {
     wmove(w, i, left_pad);
@@ -2307,6 +2382,8 @@ static void push_opers_guide_msg(void) {
     waddstr(w, items[i].desc);
   }
 }
+
+
 static void push_open_form(char const *initial) {
   Qform *qf = qform_create(Open_form_id);
   qform_set_title(qf, "Open");
@@ -2318,17 +2395,17 @@ staticni bool try_save_with_msg(Field *field, oso const *str) {
     return false;
   bool ok = hacky_try_save(field, osoc(str));
   if (ok) {
-    Qmsg *qm = qmsg_printf_push(NULL, "Saved to:\n%s", osoc(str));
+    Qmsg *qm = qmsg_printf_push(NULL, "Saved as:\n%s", osoc(str));
     qmsg_set_dismiss_mode(qm, Qmsg_dismiss_mode_passthrough);
   } else {
-    qmsg_printf_push("Error Saving File", "Unable to save file to:\n%s",
+    qmsg_printf_push("Saving error", "Unable to save:\n%s",
                      osoc(str));
   }
   return ok;
 }
 static void push_save_as_form(char const *initial) {
   Qform *qf = qform_create(Save_as_form_id);
-  qform_set_title(qf, "Save As");
+  qform_set_title(qf, "Save as:");
   qform_add_text_line(qf, Single_form_item_id, initial);
   qform_push_to_nav(qf);
 }
@@ -2337,7 +2414,7 @@ static void push_set_tempo_form(Usz initial) {
   char buff[64];
   int snres = snprintf(buff, sizeof buff, "%zu", initial);
   char const *inistr = snres > 0 && (Usz)snres < sizeof buff ? buff : "120";
-  qform_set_title(qf, "Set BPM");
+  qform_set_title(qf, "BPM");
   qform_add_text_line(qf, Single_form_item_id, inistr);
   qform_push_to_nav(qf);
 }
@@ -2346,7 +2423,7 @@ static void push_set_grid_dims_form(Usz init_height, Usz init_width) {
   char buff[128];
   int snres = snprintf(buff, sizeof buff, "%zux%zu", init_width, init_height);
   char const *inistr = snres > 0 && (Usz)snres < sizeof buff ? buff : "57x25";
-  qform_set_title(qf, "Set Grid Size");
+  qform_set_title(qf, "Grid");
   qform_add_text_line(qf, Single_form_item_id, inistr);
   qform_push_to_nav(qf);
 }
@@ -2358,8 +2435,8 @@ staticni void push_portmidi_output_device_menu(Midi_mode const *midi_mode) {
   PmError e = portmidi_init_if_necessary();
   if (e) {
     qmenu_destroy(qm);
-    qmsg_printf_push("PortMidi Error",
-                     "PortMidi error during initialization:\n%s",
+    qmsg_printf_push("PortMidi error",
+                     "PortMidi error during init:\n%s",
                      Pm_GetErrorText(e));
     return;
   }
@@ -2382,8 +2459,8 @@ staticni void push_portmidi_output_device_menu(Midi_mode const *midi_mode) {
   }
   if (output_devices == 0) {
     qmenu_destroy(qm);
-    qmsg_printf_push("No PortMidi Devices",
-                     "No PortMidi output devices found.");
+    qmsg_printf_push("PortMidi device error",
+                     "No PortMidi device.");
     return;
   }
   if (has_cur_dev_id) {
@@ -2649,7 +2726,7 @@ staticni void tui_load_conf(Tui *t) {
     // devices, we should show a message to the user letting them know why
     // orca is locked up/frozen. (When it's done via menu action, that's
     // fine, since they can figure out why.)
-    print_loading_message("Waiting on PortMidi...");
+    print_loading_message("Waiting PortMidi...");
     PmError pmerr;
     PmDeviceID devid;
     if (portmidi_find_device_id_by_name(osoc(portmidi_output_device),
@@ -2742,8 +2819,8 @@ staticni void tui_save_prefs(Tui *t) {
   osofree(midi_output_device_name);
   if (ez.error) {
     char const *msg = ezconf_w_errorstring(ez.error);
-    qmsg_printf_push("Config Error",
-                     "Error when writing configuration file:\n%s", msg);
+    qmsg_printf_push("Errore file configurazione",
+                     "Errore in scrittura file configurazione:\n%s", msg);
   }
 }
 
@@ -2934,9 +3011,17 @@ staticni Tui_menus_result tui_drive_menus(Tui *t, int key) {
         case Main_menu_controls:
           push_controls_msg();
           break;
+          
         case Main_menu_opers_guide:
           push_opers_guide_msg();
           break;
+
+//Midi CC list
+         case Main_menu_midi_guide:
+          push_midi_guide_msg();
+          break;
+          
+          
         case Main_menu_about:
           push_about_msg();
           break;
@@ -3098,8 +3183,8 @@ staticni Tui_menus_result tui_drive_menus(Tui *t, int key) {
         PmError pme = midi_mode_init_portmidi(&t->ged.midi_mode, act.picked.id);
         qnav_stack_pop();
         if (pme) {
-          qmsg_printf_push("PortMidi Error",
-                           "Error setting PortMidi output device:\n%s",
+          qmsg_printf_push("PortMidi error",
+                           "PortMidi output device configuration error:\n%s",
                            Pm_GetErrorText(pme));
         } else {
           tui_save_prefs(t);
@@ -3365,8 +3450,8 @@ int main(int argc, char **argv) {
     case Argopt_portmidi_deprecated:
       fprintf(stderr,
               "Option \"--%s\" has been removed.\nInstead, choose "
-              "your MIDI output device from within the ORCA menu.\n"
-              "This new menu allows you to pick your MIDI device "
+              "your Midi output device from within the ORCA menu.\n"
+              "This new menu allows you to pick your Midi device "
               "interactively\n",
               tui_options[longindex].name);
       exit(1);
@@ -3685,7 +3770,7 @@ event_loop:;
   case ')':
     ged_resize_grid_relative(&t.ged, 0, 1);
     break;
-  case '_':
+  case '-':
     ged_resize_grid_relative(&t.ged, -1, 0);
     break;
   case '+':
@@ -3867,6 +3952,12 @@ event_loop:;
   case CTRL_PLUS('g'):
     push_opers_guide_msg();
     break;
+  
+  // MIDI CC list
+  case CTRL_PLUS('p'):
+    push_midi_guide_msg();
+    break;
+    
   case CTRL_PLUS('s'):
     tui_try_save(&t);
     break;
@@ -3883,6 +3974,7 @@ event_loop:;
   goto event_loop;
 quit:
   ged_stop_all_sustained_notes(&t.ged);
+  qnav_deinit();
   qnav_deinit();
   if (cont_window)
     delwin(cont_window);

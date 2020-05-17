@@ -32,7 +32,6 @@ static ORCA_FORCEINLINE Usz index_of(Glyph c) { return index_table[c & 0x7f]; }
 //   if (c >= 'a' && c <= 'z') return (Usz)(c - 'a' + 10);
 //   return 0;
 // }
-
 static ORCA_FORCEINLINE bool glyph_is_lowercase(Glyph g) { return g & 1 << 5; }
 static ORCA_FORCEINLINE Glyph glyph_lowered_unsafe(Glyph g) {
   return (Glyph)(g | 1 << 5);
@@ -236,6 +235,55 @@ BEGIN_OPERATOR(midicc)
   STOP_IF_NOT_BANGED;
   Glyph channel_g = PEEK(0, 1);
   Glyph control_g = PEEK(0, 2);
+
+ // Custom MIDI CC management
+  switch (index_of(control_g)){
+    case 0: control_g = 80; break;  //0 - Macro 1
+    case 1: control_g = 81; break;  //1 - Macro 2
+    case 2: control_g = 82; break;  //2 - Macro 3
+    case 3: control_g = 83; break;  //3 - Macro 4
+    case 4: control_g = 84; break;  //4 - Macro 5
+    case 5: control_g = 85; break;  //5 - Macro 6
+    case 6: control_g = 86; break;  //6 - Macro 7
+    case 7: control_g = 87; break;  //7 - Macro 8
+
+    case 8: control_g = 21; break;  //8 - Osc1 wave index 
+    case 9: control_g = 31; break;  //9 - Osc2 wave index 
+  
+    case 10: control_g = 16; break;  //A - Accent
+    case 11: control_g = 102; break; //B - Slide 
+    case 12: control_g = 74; break;  //C - Cutoff
+    case 13: control_g = 18; break;  //D - Delay time 
+    case 14: control_g = 12; break;  //E - Envelope modulation
+    case 15: control_g = 19; break;  //F - Delay feedBack 
+
+    case 16: control_g = 14; break;  //G - Drum 1 pitch
+    case 17: control_g = 34; break;  //H - Drum 2 pitch
+    case 18: control_g = 46; break;  //I - Drum 3 pitch
+    case 19: control_g = 55; break;  //J - Drum 4 pitch
+
+    case 20: control_g = 15; break;  //K - Drum 1 decay 
+    case 21: control_g = 40; break;  //L - Drum 2 decay
+    case 22: control_g = 47; break;  //M - Drum 3 decay
+    case 23: control_g = 57; break;  //N - Drum 4 decay
+
+    case 24: control_g = 17; break;  //O - Overdrive 
+    case 25: control_g = 18; break;  //P - Delay time
+
+    case 26: control_g = 3;  break;  //Q - Polyphony mode 
+    case 27: control_g = 71; break;  //R - Resonance 
+    
+    case 28: control_g = 8;  break;  //S - Drum 1 sample select
+    case 29: control_g = 18; break;  //T - Drum 2 sample select
+    case 30: control_g = 44; break;  //U - Drum 3 sample select
+    case 31: control_g = 50; break;  //V - Drum 4 sample select
+        
+    case 32: control_g = 73; break;  //W - Attack
+    case 33: control_g = 75; break;  //X - Decay
+    case 34: control_g = 70; break;  //Y - Sustain 
+    case 35: control_g = 72; break;  //Z - Release
+  }
+
   Glyph value_g = PEEK(0, 3);
   if (channel_g == '.' || control_g == '.')
     return;
@@ -246,8 +294,16 @@ BEGIN_OPERATOR(midicc)
       (Oevent_midi_cc *)oevent_list_alloc_item(extra_params->oevent_list);
   oe->oevent_type = Oevent_type_midi_cc;
   oe->channel = (U8)channel;
-  oe->control = (U8)index_of(control_g);
-  oe->value = (U8)(index_of(value_g) * 127 / 35); // 0~35 -> 0~127
+  oe->control = (U8)control_g;
+  
+  // drum 1 and drum 2 sample select
+  if (control_g == 8 || control_g == 18) oe->value = (U8)(index_of(value_g)); 
+  
+  // drum 3 and drum 4 sample select
+  else if (control_g == 44 || control_g == 50) oe->value = (U8)(index_of(value_g) + 32); 
+
+  else oe->value = (U8)(index_of(value_g) * 127 / 35); // 0~35 -> 0~127
+
 END_OPERATOR
 
 BEGIN_OPERATOR(comment)
@@ -477,6 +533,8 @@ BEGIN_OPERATOR(halt)
   PORT(1, 0, OUT);
 END_OPERATOR
 
+
+
 BEGIN_OPERATOR(increment)
   LOWERCASE_REQUIRES_BANG;
   PORT(0, -1, IN | PARAM);
@@ -495,6 +553,8 @@ BEGIN_OPERATOR(increment)
   val = val % max;
   POKE(1, 0, glyph_with_case(glyph_of(val), gb));
 END_OPERATOR
+
+
 
 BEGIN_OPERATOR(jump)
   LOWERCASE_REQUIRES_BANG;
@@ -672,7 +732,7 @@ END_OPERATOR
 BEGIN_OPERATOR(variable)
   LOWERCASE_REQUIRES_BANG;
   PORT(0, -1, IN | PARAM);
-  PORT(0, 1, IN);
+  PORT(0, 1, IN | PARAM);
   Glyph left = PEEK(0, -1);
   Glyph right = PEEK(0, 1);
   if (left != '.') {
@@ -692,6 +752,8 @@ BEGIN_OPERATOR(teleport)
   LOWERCASE_REQUIRES_BANG;
   Isz out_x = (Isz)index_of(PEEK(0, -2));
   Isz out_y = (Isz)index_of(PEEK(0, -1)) + 1;
+  
+  
   PORT(0, -2, IN | PARAM); // x
   PORT(0, -1, IN | PARAM); // y
   PORT(0, 1, IN);
