@@ -9,12 +9,18 @@
 #include "vmio.h"
 #include <getopt.h>
 #include <locale.h>
+
 #define SOKOL_IMPL
 #include "sokol_time.h"
 #undef SOKOL_IMPL
 
 #ifdef FEAT_PORTMIDI
 #include <portmidi.h>
+#endif
+
+#if NCURSES_VERSION_PATCH < 20081122
+int _nc_has_mouse(void);
+#define has_mouse _nc_has_mouse
 #endif
 
 #define TIME_DEBUG 0
@@ -2726,7 +2732,7 @@ staticni void tui_load_conf(Tui *t) {
     // devices, we should show a message to the user letting them know why
     // orca is locked up/frozen. (When it's done via menu action, that's
     // fine, since they can figure out why.)
-    print_loading_message("Waiting PortMidi...");
+    print_loading_message("Waiting on PortMidi...");
     PmError pmerr;
     PmDeviceID devid;
     if (portmidi_find_device_id_by_name(osoc(portmidi_output_device),
@@ -2819,8 +2825,8 @@ staticni void tui_save_prefs(Tui *t) {
   osofree(midi_output_device_name);
   if (ez.error) {
     char const *msg = ezconf_w_errorstring(ez.error);
-    qmsg_printf_push("Errore file configurazione",
-                     "Errore in scrittura file configurazione:\n%s", msg);
+    qmsg_printf_push("Config Error",
+                     "Error when writing configuration file:\n%s", msg);
   }
 }
 
@@ -3183,8 +3189,8 @@ staticni Tui_menus_result tui_drive_menus(Tui *t, int key) {
         PmError pme = midi_mode_init_portmidi(&t->ged.midi_mode, act.picked.id);
         qnav_stack_pop();
         if (pme) {
-          qmsg_printf_push("PortMidi error",
-                           "PortMidi output device configuration error:\n%s",
+          qmsg_printf_push("PortMidi Error",
+                           "Error setting PortMidi output device:\n%s",
                            Pm_GetErrorText(pme));
         } else {
           tui_save_prefs(t);
@@ -3450,8 +3456,8 @@ int main(int argc, char **argv) {
     case Argopt_portmidi_deprecated:
       fprintf(stderr,
               "Option \"--%s\" has been removed.\nInstead, choose "
-              "your Midi output device from within the ORCA menu.\n"
-              "This new menu allows you to pick your Midi device "
+              "your MIDI output device from within the ORCA menu.\n"
+              "This new menu allows you to pick your MIDI device "
               "interactively\n",
               tui_options[longindex].name);
       exit(1);
@@ -3974,7 +3980,6 @@ event_loop:;
   goto event_loop;
 quit:
   ged_stop_all_sustained_notes(&t.ged);
-  qnav_deinit();
   qnav_deinit();
   if (cont_window)
     delwin(cont_window);
