@@ -82,8 +82,8 @@ static Glyph_class glyph_class_of(Glyph glyph) {
   case 's':
   case 'W':
   case 'w':
-  case 'Z':
-  case 'z':
+  //case 'Z':
+  //case 'z':
     return Glyph_class_movement;
   case '!':
   case ':':
