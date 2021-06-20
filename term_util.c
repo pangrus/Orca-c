@@ -2,7 +2,6 @@
 #include "oso.h"
 #include <ctype.h>
 #include <form.h>
-#include <menu.h>
 
 void term_util_init_colors() {
   if (has_colors()) {
@@ -38,20 +37,18 @@ struct Qmsg {
   Qmsg_dismiss_mode dismiss_mode;
 };
 
-struct Qmenu_item_extra {
-  int user_id;
+typedef struct Qmenu_item {
+  char const *text;
+  int id;
   U8 owns_string : 1, is_spacer : 1;
-};
+} Qmenu_item;
 
 struct Qmenu {
   Qblock qblock;
-  MENU *ncurses_menu;
-  ITEM **ncurses_items;
+  Qmenu_item *items;
   Usz items_count, items_cap;
-  ITEM *initial_item;
-  int id;
-  // Flag for right-padding hack. Temp until we do our own menus
-  U8 has_submenu_item : 1;
+  int current_item, id;
+  U8 needs_reprint : 1, is_frontmost : 1;
 };
 
 struct Qform {
@@ -62,75 +59,86 @@ struct Qform {
   int id;
 };
 
+static void qmenu_free(Qmenu *qm);
+static void qform_free(Qform *qf);
+ORCA_NOINLINE static void qmenu_reprint(Qmenu *qm);
+
 Qnav_stack qnav_stack;
 
-void qnav_init() { qnav_stack = (Qnav_stack){.blocks = {0}}; }
+void qnav_init() { qnav_stack = (Qnav_stack){0}; }
 void qnav_deinit() {
-  while (qnav_stack.count != 0)
+  while (qnav_stack.top)
     qnav_stack_pop();
+}
+// Set new y and x coordinates for the top and left of a Qblock based on the
+// position of the Qblock "below" it in the stack. (Below meaning its order in
+// the stack, not vertical position on a Y axis.) The target Qblock should
+// already be inserted into the stack somewhere, so don't call this before
+// you've finished doing the rest of the setup on the Qblock. The y and x
+// fields can be junk, though, since this function writes to them without
+// reading them.
+static ORCA_NOINLINE void qnav_reposition_block(Qblock *qb) {
+  int top = 0, left = 0;
+  Qblock *prev = qb->down;
+  if (!prev)
+    goto done;
+  int total_h, total_w;
+  getmaxyx(qb->outer_window, total_h, total_w);
+  WINDOW *w = prev->outer_window;
+  int prev_y = prev->y, prev_x = prev->x, prev_h, prev_w;
+  getmaxyx(w, prev_h, prev_w);
+  // Start by trying to position the item to the right of the previous item.
+  left = prev_x + prev_w + 0;
+  int term_h, term_w;
+  getmaxyx(stdscr, term_h, term_w);
+  // Check if we'll run out of room if we position the new item to the right
+  // of the existing item (with the same Y position.)
+  if (left + total_w > term_w) {
+    // If we have enough room if we position just below the previous item in
+    // the stack, do that instead of positioning to the right of it.
+    if (prev_x + total_w <= term_w && total_h < term_h - (prev_y + prev_h)) {
+      top = prev_y + prev_h;
+      left = prev_x;
+    }
+    // If the item doesn't fit there, but it's less wide than the terminal,
+    // right-align it to the edge of the terminal.
+    else if (total_w < term_w) {
+      left = term_w - total_w;
+    }
+    // Otherwise, just start the layout over at Y=0,X=0
+    else {
+      left = 0;
+    }
+  }
+done:
+  qb->y = top;
+  qb->x = left;
 }
 static ORCA_NOINLINE void qnav_stack_push(Qblock *qb, int height, int width) {
 #ifndef NDEBUG
-  for (Usz i = 0; i < qnav_stack.count; ++i) {
-    assert(qnav_stack.blocks[i] != qb);
+  for (Qblock *i = qnav_stack.top; i; i = i->down) {
+    assert(i != qb);
   }
 #endif
-  int top = 0, left = 0;
   int total_h = height + 2, total_w = width + 2;
-  if (qnav_stack.count > 0) {
-    WINDOW *w = qnav_stack.blocks[qnav_stack.count - 1]->outer_window;
-    int prev_y, prev_x, prev_h, prev_w;
-    getbegyx(w, prev_y, prev_x);
-    getmaxyx(w, prev_h, prev_w);
-    // Start by trying to position the item to the right of the previous item.
-    left = prev_x + prev_w + 0;
-    int term_h, term_w;
-    getmaxyx(stdscr, term_h, term_w);
-    // Check if we'll run out of room if we position the new item to the right
-    // of the existing item (with the same Y position.)
-    if (left + total_w > term_w) {
-      // If we have enough room if we position just below the previous item in
-      // the stack, do that instead of positioning to the right of it.
-      if (prev_x + total_w <= term_w && total_h < term_h - (prev_y + prev_h)) {
-        top = prev_y + prev_h;
-        left = prev_x;
-      }
-      // If the item doesn't fit there, but it's less wide than the terminal,
-      // right-align it to the edge of the terminal.
-      else if (total_w < term_w) {
-        left = term_w - total_w;
-      }
-      // Otherwise, just start the layout over at Y=0,X=0
-      else {
-        left = 0;
-      }
-    }
-  }
-  qnav_stack.blocks[qnav_stack.count] = qb;
-  ++qnav_stack.count;
+  if (qnav_stack.top)
+    qnav_stack.top->up = qb;
+  else
+    qnav_stack.bottom = qb;
+  qb->down = qnav_stack.top;
+  qnav_stack.top = qb;
   qb->outer_window = newpad(total_h, total_w);
-  // This used to be derwin when when used newwin instead of newpad -- not sure
-  // if we should use derwin or subpad now. subpad is probably more compatible.
-  // ncurses docs state that it handles it correctly, unlike some others?
   qb->content_window = subpad(qb->outer_window, height, width, 1, 1);
-  qb->y = top;
-  qb->x = left;
+  qnav_reposition_block(qb);
   qnav_stack.occlusion_dirty = true;
 }
 
-Qblock *qnav_top_block() {
-  if (qnav_stack.count == 0)
-    return NULL;
-  return qnav_stack.blocks[qnav_stack.count - 1];
-}
+Qblock *qnav_top_block() { return qnav_stack.top; }
 
 void qblock_init(Qblock *qb, Qblock_type_tag tag) {
   *qb = (Qblock){0};
   qb->tag = tag;
 }
-
-void qmenu_free(Qmenu *qm);
-void qform_free(Qform *qf);
 
 void qnav_free_block(Qblock *qb) {
   switch (qb->tag) {
@@ -149,10 +157,16 @@ void qnav_free_block(Qblock *qb) {
 }
 
 void qnav_stack_pop(void) {
-  assert(qnav_stack.count > 0);
-  if (qnav_stack.count == 0)
+  assert(qnav_stack.top);
+  if (!qnav_stack.top)
     return;
-  Qblock *qb = qnav_stack.blocks[qnav_stack.count - 1];
+  Qblock *qb = qnav_stack.top;
+  qnav_stack.top = qb->down;
+  if (qnav_stack.top)
+    qnav_stack.top->up = NULL;
+  else
+    qnav_stack.bottom = NULL;
+  qnav_stack.occlusion_dirty = true;
   WINDOW *content_window = qb->content_window;
   WINDOW *outer_window = qb->outer_window;
   // erase any stuff underneath where this window is, in case it's outside of
@@ -162,31 +176,35 @@ void qnav_stack_pop(void) {
   qnav_free_block(qb);
   delwin(content_window);
   delwin(outer_window);
-  --qnav_stack.count;
-  qnav_stack.blocks[qnav_stack.count] = NULL;
-  qnav_stack.occlusion_dirty = true;
 }
 
 bool qnav_draw(void) {
   bool drew_any = false;
-  if (qnav_stack.count < 1)
+  if (!qnav_stack.bottom)
     goto done;
   int term_h, term_w;
   getmaxyx(stdscr, term_h, term_w);
-  for (Usz i = 0; i < qnav_stack.count; ++i) {
-    Qblock *qb = qnav_stack.blocks[i];
-    if (qnav_stack.occlusion_dirty) {
-      bool is_frontmost = i == qnav_stack.count - 1;
+  for (Qblock *qb = qnav_stack.bottom; qb; qb = qb->up) {
+    bool is_frontmost = qb == qnav_stack.top;
+    if (qnav_stack.occlusion_dirty)
       qblock_print_frame(qb, is_frontmost);
-      switch (qb->tag) {
-      case Qblock_type_qmsg:
-        break;
-      case Qblock_type_qmenu:
-        qmenu_set_displayed_active(qmenu_of(qb), is_frontmost);
-        break;
-      case Qblock_type_qform:
-        break;
+    switch (qb->tag) {
+    case Qblock_type_qmsg:
+      break;
+    case Qblock_type_qmenu: {
+      Qmenu *qm = qmenu_of(qb);
+      if (qm->is_frontmost != is_frontmost) {
+        qm->is_frontmost = is_frontmost;
+        qm->needs_reprint = 1;
       }
+      if (qm->needs_reprint) {
+        qmenu_reprint(qm);
+        qm->needs_reprint = 0;
+      }
+      break;
+    }
+    case Qblock_type_qform:
+      break;
     }
     touchwin(qb->outer_window); // here? or after continue?
     if (term_h < 1 || term_w < 1)
@@ -209,6 +227,14 @@ done:
   return drew_any;
 }
 
+void qnav_adjust_term_size(void) {
+  if (!qnav_stack.bottom)
+    return;
+  for (Qblock *qb = qnav_stack.bottom; qb; qb = qb->up)
+    qnav_reposition_block(qb);
+  qnav_stack.occlusion_dirty = true;
+}
+
 void qblock_print_border(Qblock *qb, unsigned int attr) {
   wborder(qb->outer_window, ACS_VLINE | attr, ACS_VLINE | attr,
           ACS_HLINE | attr, ACS_HLINE | attr, ACS_ULCORNER | attr,
@@ -222,7 +248,7 @@ void qblock_print_title(Qblock *qb, char const *title, int attr) {
   wattr_get(qb->outer_window, &attrs, &pair, NULL);
   wattrset(qb->outer_window, attr);
   waddch(qb->outer_window, ' ');
-  wprintw(qb->outer_window, title);
+  waddstr(qb->outer_window, title);
   waddch(qb->outer_window, ' ');
   wattr_set(qb->outer_window, attrs, pair, NULL);
 }
@@ -343,91 +369,65 @@ Qmsg *qmsg_of(Qblock *qb) { return ORCA_CONTAINER_OF(qb, Qmsg, qblock); }
 Qmenu *qmenu_create(int id) {
   Qmenu *qm = (Qmenu *)malloc(sizeof(Qmenu));
   qblock_init(&qm->qblock, Qblock_type_qmenu);
-  qm->ncurses_menu = NULL;
-  qm->ncurses_items = NULL;
+  qm->items = NULL;
   qm->items_count = 0;
   qm->items_cap = 0;
-  qm->initial_item = NULL;
+  qm->current_item = 0;
   qm->id = id;
-  qm->has_submenu_item = 0;
+  qm->needs_reprint = 1;
+  qm->is_frontmost = 0;
   return qm;
 }
 void qmenu_destroy(Qmenu *qm) { qmenu_free(qm); }
 int qmenu_id(Qmenu const *qm) { return qm->id; }
-static ORCA_NOINLINE void
-qmenu_allocitems(Qmenu *qm, Usz count, Usz *out_idx, ITEM ***out_items,
-                 struct Qmenu_item_extra **out_extras) {
+static ORCA_NOINLINE Qmenu_item *qmenu_allocitems(Qmenu *qm, Usz count) {
   Usz old_count = qm->items_count;
-  // Add 1 for the extra null terminator guy
-  Usz new_count = old_count + count + 1;
+  if (old_count > SIZE_MAX - count) // overflow
+    exit(1);
+  Usz new_count = old_count + count;
   Usz items_cap = qm->items_cap;
-  ITEM **items = qm->ncurses_items;
+  Qmenu_item *items = qm->items;
   if (new_count > items_cap) {
     // todo overflow check, realloc fail check
-    Usz old_cap = items_cap;
     Usz new_cap = new_count < 32 ? 32 : orca_round_up_power2(new_count);
-    Usz new_size = new_cap * (sizeof(ITEM *) + sizeof(struct Qmenu_item_extra));
-    ITEM **new_items = (ITEM **)realloc(items, new_size);
+    Usz new_size = new_cap * sizeof(Qmenu_item);
+    Qmenu_item *new_items = (Qmenu_item *)realloc(items, new_size);
     if (!new_items)
       exit(1);
     items = new_items;
     items_cap = new_cap;
-    // Move old extras data to new position
-    Usz old_extras_offset = sizeof(ITEM *) * old_cap;
-    Usz new_extras_offset = sizeof(ITEM *) * new_cap;
-    Usz old_extras_size = sizeof(struct Qmenu_item_extra) * old_count;
-    memmove((char *)items + new_extras_offset,
-            (char *)items + old_extras_offset, old_extras_size);
-    qm->ncurses_items = new_items;
+    qm->items = new_items;
     qm->items_cap = new_cap;
   }
-  // Not using new_count here in order to leave an extra 1 for the null
-  // terminator as required by ncurses.
-  qm->items_count = old_count + count;
-  Usz extras_offset = sizeof(ITEM *) * items_cap;
-  *out_idx = old_count;
-  *out_items = items + old_count;
-  *out_extras =
-      (struct Qmenu_item_extra *)((char *)items + extras_offset) + old_count;
+  qm->items_count = new_count;
+  return items + old_count;
 }
-ORCA_FORCEINLINE static struct Qmenu_item_extra *
-qmenu_item_extras_ptr(Qmenu *qm) {
-  Usz offset = sizeof(ITEM *) * qm->items_cap;
-  return (struct Qmenu_item_extra *)((char *)qm->ncurses_items + offset);
-}
-// Get the curses menu item user pointer out, turn it to an int, and use it as
-// an index into the 'extras' arrays.
-ORCA_FORCEINLINE static struct Qmenu_item_extra *
-qmenu_itemextra(struct Qmenu_item_extra *extras, ITEM *item) {
-  return extras + (int)(intptr_t)(item_userptr(item));
+ORCA_NOINLINE static void qmenu_reprint(Qmenu *qm) {
+  WINDOW *win = qm->qblock.content_window;
+  Qmenu_item *items = qm->items;
+  bool isfront = qm->is_frontmost;
+  werase(win);
+  for (Usz i = 0, n = qm->items_count; i < n; ++i) {
+    bool iscur = items[i].id == qm->current_item;
+    wattrset(win, isfront ? iscur ? A_BOLD : A_NORMAL : A_DIM);
+    wmove(win, (int)i, iscur ? 1 : 3);
+    if (iscur)
+      waddstr(win, "> ");
+    waddstr(win, items[i].text);
+  }
 }
 void qmenu_set_title(Qmenu *qm, char const *title) {
   qblock_set_title(&qm->qblock, title);
 }
 void qmenu_add_choice(Qmenu *qm, int id, char const *text) {
   assert(id != 0);
-  Usz idx;
-  ITEM **items;
-  struct Qmenu_item_extra *extras;
-  qmenu_allocitems(qm, 1, &idx, &items, &extras);
-  items[0] = new_item(text, NULL);
-  set_item_userptr(items[0], (void *)(uintptr_t)idx);
-  extras[0].user_id = id;
-  extras[0].owns_string = false;
-  extras[0].is_spacer = false;
-}
-void qmenu_add_submenu(Qmenu *qm, int id, char const *text) {
-  assert(id != 0);
-  qm->has_submenu_item = true; // don't add +1 right padding to subwindow
-  Usz idx;
-  ITEM **items;
-  struct Qmenu_item_extra *extras;
-  qmenu_allocitems(qm, 1, &idx, &items, &extras);
-  items[0] = new_item(text, ">");
-  set_item_userptr(items[0], (void *)(uintptr_t)idx);
-  extras[0].user_id = id;
-  extras[0].owns_string = false;
-  extras[0].is_spacer = false;
+  Qmenu_item *item = qmenu_allocitems(qm, 1);
+  item->text = text;
+  item->id = id;
+  item->owns_string = false;
+  item->is_spacer = false;
+  if (!qm->current_item)
+    qm->current_item = id;
 }
 void qmenu_add_printf(Qmenu *qm, int id, char const *fmt, ...) {
   va_list ap;
@@ -442,85 +442,42 @@ void qmenu_add_printf(Qmenu *qm, int id, char const *fmt, ...) {
   va_end(ap);
   if (printedsize != textsize)
     exit(1); // todo better handling?
-  Usz idx;
-  ITEM **items;
-  struct Qmenu_item_extra *extras;
-  qmenu_allocitems(qm, 1, &idx, &items, &extras);
-  items[0] = new_item(buffer, NULL);
-  set_item_userptr(items[0], (void *)(uintptr_t)idx);
-  extras[0].user_id = id;
-  extras[0].owns_string = true;
-  extras[0].is_spacer = false;
+  Qmenu_item *item = qmenu_allocitems(qm, 1);
+  item->text = buffer;
+  item->id = id;
+  item->owns_string = true;
+  item->is_spacer = false;
+  if (!qm->current_item)
+    qm->current_item = id;
 }
 void qmenu_add_spacer(Qmenu *qm) {
-  Usz idx;
-  ITEM **items;
-  struct Qmenu_item_extra *extras;
-  qmenu_allocitems(qm, 1, &idx, &items, &extras);
-  items[0] = new_item(" ", NULL);
-  item_opts_off(items[0], O_SELECTABLE);
-  set_item_userptr(items[0], (void *)(uintptr_t)idx);
-  extras[0].user_id = 0;
-  extras[0].owns_string = false;
-  extras[0].is_spacer = true;
+  Qmenu_item *item = qmenu_allocitems(qm, 1);
+  item->text = " ";
+  item->id = 0;
+  item->owns_string = false;
+  item->is_spacer = true;
 }
 void qmenu_set_current_item(Qmenu *qm, int id) {
-  ITEM **items = qm->ncurses_items;
-  struct Qmenu_item_extra *extras = qmenu_item_extras_ptr(qm);
-  ITEM *found = NULL;
-  for (Usz i = 0, n = qm->items_count; i < n; i++) {
-    ITEM *item = items[i];
-    if (qmenu_itemextra(extras, item)->user_id == id) {
-      found = item;
-      break;
-    }
-  }
-  if (!found)
+  if (qm->current_item == id)
     return;
-  if (qm->ncurses_menu) {
-    set_current_item(qm->ncurses_menu, found);
-  } else {
-    qm->initial_item = found;
-  }
+  qm->current_item = id;
+  qm->needs_reprint = 1;
 }
-int qmenu_current_item(Qmenu *qm) {
-  ITEM *item = NULL;
-  if (qm->ncurses_menu)
-    item = current_item(qm->ncurses_menu);
-  if (!item)
-    item = qm->initial_item;
-  if (!item)
-    return 0;
-  struct Qmenu_item_extra *extras = qmenu_item_extras_ptr(qm);
-  return qmenu_itemextra(extras, item)->user_id;
-}
-void qmenu_set_displayed_active(Qmenu *qm, bool active) {
-  // Could add a flag in the Qmenu to avoid redundantly changing this stuff.
-  set_menu_fore(qm->ncurses_menu, active ? A_BOLD : A_DIM);
-  set_menu_back(qm->ncurses_menu, active ? A_NORMAL : A_DIM);
-  set_menu_grey(qm->ncurses_menu, active ? A_DIM : A_DIM);
-}
+int qmenu_current_item(Qmenu *qm) { return qm->current_item; }
 void qmenu_push_to_nav(Qmenu *qm) {
-  // new_menu() will get angry if there are no items in the menu. We'll get a
-  // null pointer back, and our code will get angry. Instead, just add an empty
-  // spacer item. This will probably only ever occur as a programming error,
-  // but we should try to avoid having to deal with qmenu_push_to_nav()
-  // returning a non-ignorable error for now.
+  // Probably a programming error if there are no items. Make the menu visible
+  // so the programmer knows something went wrong.
   if (qm->items_count == 0)
     qmenu_add_spacer(qm);
-  // Allocating items always leaves an extra available item at the end. This is
-  // so we can assign a NULL to it here, since ncurses requires the array to be
-  // null terminated instead of using a count.
-  qm->ncurses_items[qm->items_count] = NULL;
-  qm->ncurses_menu = new_menu(qm->ncurses_items);
-  set_menu_mark(qm->ncurses_menu, " > ");
-  set_menu_fore(qm->ncurses_menu, A_BOLD);
-  set_menu_grey(qm->ncurses_menu, A_DIM);
-  set_menu_format(qm->ncurses_menu, 30, 1); // temp to allow large Y
-  int menu_min_h, menu_min_w;
-  scale_menu(qm->ncurses_menu, &menu_min_h, &menu_min_w);
-  if (!qm->has_submenu_item)
-    menu_min_w += 1; // temp hack
+  Usz n = qm->items_count;
+  Qmenu_item *items = qm->items;
+  int menu_min_h = (int)n, menu_min_w = 0;
+  for (Usz i = 0; i < n; ++i) {
+    int item_w = (int)strlen(items[i].text);
+    if (item_w > menu_min_w)
+      menu_min_w = item_w;
+  }
+  menu_min_w += 3 + 1; // left " > " plus 1 empty space on right
   if (qm->qblock.title) {
     // Stupid lack of wcswidth() means we can't know how wide this string is
     // actually displayed. Just fake it for now, until we have Unicode strings
@@ -529,58 +486,50 @@ void qmenu_push_to_nav(Qmenu *qm) {
     if (title_w > menu_min_w)
       menu_min_w = title_w;
   }
-  if (qm->initial_item)
-    set_current_item(qm->ncurses_menu, qm->initial_item);
   qnav_stack_push(&qm->qblock, menu_min_h, menu_min_w);
-  set_menu_win(qm->ncurses_menu, qm->qblock.outer_window);
-  set_menu_sub(qm->ncurses_menu, qm->qblock.content_window);
-  // TODO use this to set how "big" the menu is, visually, for scrolling.
-  // (ncurses can't figure that out on its own, aparently...)
-  // We'll need to split apart some work chunks so that we calculate the size
-  // beforehand.
-  // set_menu_format(qm->ncurses_menu, 5, 1);
-  post_menu(qm->ncurses_menu);
 }
 
-void qmenu_free(Qmenu *qm) {
-  unpost_menu(qm->ncurses_menu);
-  free_menu(qm->ncurses_menu);
-  struct Qmenu_item_extra *extras = qmenu_item_extras_ptr(qm);
-  for (Usz i = 0; i < qm->items_count; ++i) {
-    ITEM *item = qm->ncurses_items[i];
-    struct Qmenu_item_extra *extra = qmenu_itemextra(extras, item);
-    char const *freed_str = NULL;
-    if (extra->owns_string)
-      freed_str = item_name(item);
-    free_item(qm->ncurses_items[i]);
-    if (freed_str)
-      free((void *)freed_str);
+static void qmenu_free(Qmenu *qm) {
+  Qmenu_item *items = qm->items;
+  for (Usz i = 0, n = qm->items_count; i < n; ++i) {
+    if (items[i].owns_string)
+      free((void *)items[i].text);
   }
-  free(qm->ncurses_items);
+  free(qm->items);
   free(qm);
 }
 
-ORCA_NOINLINE
-static void qmenu_drive_upordown(Qmenu *qm, int req_up_or_down) {
-  struct Qmenu_item_extra *extras = qmenu_item_extras_ptr(qm);
-  ITEM *starting = current_item(qm->ncurses_menu);
-  menu_driver(qm->ncurses_menu, req_up_or_down);
-  ITEM *cur = current_item(qm->ncurses_menu);
+ORCA_NOINLINE static void qmenu_drive_upordown(Qmenu *qm, bool downwards) {
+  Qmenu_item *items = qm->items;
+  Usz n = qm->items_count;
+  if (n <= 1)
+    return;
+  int cur_id = qm->current_item;
+  Usz starting = 0;
+  for (; starting < n; ++starting) {
+    if (items[starting].id == cur_id)
+      goto found;
+  }
+  return;
+found:;
+  Usz current = starting;
   for (;;) {
-    if (!cur || cur == starting)
+    if (downwards && current < n - 1)
+      current++;
+    else if (!downwards && current > 0)
+      current--;
+    if (current == starting)
       break;
-    if (!qmenu_itemextra(extras, cur)->is_spacer)
+    if (!items[current].is_spacer)
       break;
-    ITEM *prev = cur;
-    menu_driver(qm->ncurses_menu, req_up_or_down);
-    cur = current_item(qm->ncurses_menu);
-    if (cur == prev)
-      break;
+  }
+  if (current != starting) {
+    qm->current_item = items[current].id;
+    qm->needs_reprint = 1;
   }
 }
 
 bool qmenu_drive(Qmenu *qm, int key, Qmenu_action *out_action) {
-  struct Qmenu_item_extra *extras = qmenu_item_extras_ptr(qm);
   switch (key) {
   case 27: {
     out_action->any.type = Qmenu_action_type_canceled;
@@ -588,17 +537,15 @@ bool qmenu_drive(Qmenu *qm, int key, Qmenu_action *out_action) {
   }
   case ' ':
   case '\r':
-  case KEY_ENTER: {
-    ITEM *cur = current_item(qm->ncurses_menu);
+  case KEY_ENTER:
     out_action->picked.type = Qmenu_action_type_picked;
-    out_action->picked.id = cur ? qmenu_itemextra(extras, cur)->user_id : 0;
+    out_action->picked.id = qm->current_item;
     return true;
-  }
   case KEY_UP:
-    qmenu_drive_upordown(qm, REQ_UP_ITEM);
+    qmenu_drive_upordown(qm, false);
     return false;
   case KEY_DOWN:
-    qmenu_drive_upordown(qm, REQ_DOWN_ITEM);
+    qmenu_drive_upordown(qm, true);
     return false;
   }
   return false;
@@ -625,12 +572,21 @@ Qform *qform_create(int id) {
   qf->id = id;
   return qf;
 }
-
-Qform *qform_of(Qblock *qb) { return ORCA_CONTAINER_OF(qb, Qform, qblock); }
-
+static void qform_free(Qform *qf) {
+  curs_set(0);
+  unpost_form(qf->ncurses_form);
+  free_form(qf->ncurses_form);
+  for (Usz i = 0; i < qf->fields_count; ++i) {
+    free_field(qf->ncurses_fields[i]);
+  }
+  free(qf);
+}
 int qform_id(Qform const *qf) { return qf->id; }
-
-void qform_add_text_line(Qform *qf, int id, char const *initial) {
+Qform *qform_of(Qblock *qb) { return ORCA_CONTAINER_OF(qb, Qform, qblock); }
+void qform_set_title(Qform *qf, char const *title) {
+  qblock_set_title(&qf->qblock, title);
+}
+void qform_add_line_input(Qform *qf, int id, char const *initial) {
   FIELD *f = new_field(1, 30, 0, 0, 0, 0);
   if (initial)
     set_field_buffer(f, 0, initial);
@@ -640,7 +596,6 @@ void qform_add_text_line(Qform *qf, int id, char const *initial) {
   ++qf->fields_count;
   qf->ncurses_fields[qf->fields_count] = NULL;
 }
-
 void qform_push_to_nav(Qform *qf) {
   qf->ncurses_form = new_form(qf->ncurses_fields);
   int form_min_h, form_min_w;
@@ -653,21 +608,12 @@ void qform_push_to_nav(Qform *qf) {
   curs_set(1);
   form_driver(qf->ncurses_form, REQ_END_LINE);
 }
-
-void qform_set_title(Qform *qf, char const *title) {
-  qblock_set_title(&qf->qblock, title);
+void qform_single_line_input(int id, char const *title, char const *initial) {
+  Qform *qf = qform_create(id);
+  qform_set_title(qf, title);
+  qform_add_line_input(qf, 1, initial);
+  qform_push_to_nav(qf);
 }
-
-void qform_free(Qform *qf) {
-  curs_set(0);
-  unpost_form(qf->ncurses_form);
-  free_form(qf->ncurses_form);
-  for (Usz i = 0; i < qf->fields_count; ++i) {
-    free_field(qf->ncurses_fields[i]);
-  }
-  free(qf);
-}
-
 bool qform_drive(Qform *qf, int key, Qform_action *out_action) {
   switch (key) {
   case 27:
@@ -707,7 +653,6 @@ bool qform_drive(Qform *qf, int key, Qform_action *out_action) {
   form_driver(qf->ncurses_form, key);
   return false;
 }
-
 static Usz size_without_trailing_spaces(char const *str) {
   Usz size = strlen(str);
   for (;;) {
@@ -719,8 +664,7 @@ static Usz size_without_trailing_spaces(char const *str) {
   }
   return size;
 }
-
-FIELD *qform_find_field(Qform const *qf, int id) {
+static FIELD *qform_find_field(Qform const *qf, int id) {
   Usz count = qf->fields_count;
   for (Usz i = 0; i < count; ++i) {
     FIELD *f = qf->ncurses_fields[i];
@@ -729,7 +673,6 @@ FIELD *qform_find_field(Qform const *qf, int id) {
   }
   return NULL;
 }
-
 bool qform_get_text_line(Qform const *qf, int id, oso **out) {
   FIELD *f = qform_find_field(qf, id);
   if (!f)
@@ -741,4 +684,14 @@ bool qform_get_text_line(Qform const *qf, int id, oso **out) {
   Usz trimmed = size_without_trailing_spaces(buf);
   osoputlen(out, buf, trimmed);
   return true;
+}
+bool qform_get_single_text_line(Qform const *qf, struct oso **out) {
+  return qform_get_text_line(qf, 1, out);
+}
+oso *qform_get_nonempty_single_line_input(Qform *qf) {
+  oso *s = NULL;
+  if (qform_get_text_line(qf, 1, &s) && osolen(s) > 0)
+    return s;
+  osofree(s);
+  return NULL;
 }

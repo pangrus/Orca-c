@@ -255,7 +255,7 @@ BEGIN_OPERATOR(midicc)
     case 12: control_g = 74; break;  //C - Cutoff
     case 13: control_g = 18; break;  //D - Delay time 
     case 14: control_g = 12; break;  //E - Envelope modulation
-    case 15: control_g = 19; break;  //F - Delay feedBack 
+    case 15: control_g = 19; break;  //F - Delay Feedback 
 
     case 16: control_g = 14; break;  //G - Drum 1 pitch
     case 17: control_g = 34; break;  //H - Drum 2 pitch

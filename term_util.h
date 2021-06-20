@@ -56,16 +56,16 @@ typedef enum {
   Qblock_type_qform,
 } Qblock_type_tag;
 
-typedef struct {
+typedef struct Qblock {
   Qblock_type_tag tag;
   WINDOW *outer_window, *content_window;
   char const *title;
+  struct Qblock *down, *up;
   int y, x;
 } Qblock;
 
 typedef struct {
-  Qblock *blocks[16];
-  Usz count;
+  Qblock *top, *bottom;
   bool occlusion_dirty;
 } Qnav_stack;
 
@@ -120,6 +120,7 @@ void qnav_deinit(void);
 Qblock *qnav_top_block(void);
 void qnav_stack_pop(void);
 bool qnav_draw(void); // also clear qnav_stack.occlusion_dirty
+void qnav_adjust_term_size(void);
 
 void qblock_print_frame(Qblock *qb, bool active);
 void qblock_set_title(Qblock *qb, char const *title);
@@ -141,12 +142,10 @@ void qmenu_destroy(Qmenu *qm);
 int qmenu_id(Qmenu const *qm);
 void qmenu_set_title(Qmenu *qm, char const *title);
 void qmenu_add_choice(Qmenu *qm, int id, char const *text);
-void qmenu_add_submenu(Qmenu *qm, int id, char const *text);
 void qmenu_add_printf(Qmenu *qm, int id, char const *fmt, ...)
     ORCA_TERM_UTIL_PRINTF(3, 4);
 void qmenu_add_spacer(Qmenu *qm);
 void qmenu_set_current_item(Qmenu *qm, int id);
-void qmenu_set_displayed_active(Qmenu *qm, bool active);
 void qmenu_push_to_nav(Qmenu *qm);
 int qmenu_current_item(Qmenu *qm);
 bool qmenu_drive(Qmenu *qm, int key, Qmenu_action *out_action);
@@ -156,11 +155,14 @@ bool qmenu_top_is_menu(int id);
 Qform *qform_create(int id);
 int qform_id(Qform const *qf);
 Qform *qform_of(Qblock *qb);
-void qform_add_text_line(Qform *qf, int id, char const *initial);
-void qform_push_to_nav(Qform *qf);
 void qform_set_title(Qform *qf, char const *title);
+void qform_add_line_input(Qform *qf, int id, char const *initial);
+void qform_push_to_nav(Qform *qf);
+void qform_single_line_input(int id, char const *title, char const* initial);
 bool qform_drive(Qform *qf, int key, Qform_action *out_action);
 bool qform_get_text_line(Qform const *qf, int id, struct oso **out);
+bool qform_get_single_text_line(Qform const *qf, struct oso **out);
+struct oso *qform_get_nonempty_single_line_input(Qform *qf);
 
 extern Qnav_stack qnav_stack;
 
