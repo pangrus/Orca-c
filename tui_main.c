@@ -82,8 +82,6 @@ static Glyph_class glyph_class_of(Glyph glyph) {
   case 's':
   case 'W':
   case 'w':
-  //case 'Z':
-  //case 'z':
     return Glyph_class_movement;
   case '!':
   case ':':
@@ -108,33 +106,22 @@ static attr_t term_attrs_of_cell(Glyph g, Mark m) {
   Glyph_class gclass = glyph_class_of(g);
   attr_t attr = A_normal;
   switch (gclass) {
-
   case Glyph_class_unknown:
-    attr = A_normal | fg_bg(C_black, C_natural);
+    attr = A_bold | fg_bg(C_black, C_natural);
     break;
-
   case Glyph_class_grid:
     attr = A_bold | fg_bg(C_black, C_natural);
     break;
-
   case Glyph_class_comment:
-    attr = A_normal | Cdef_normal;
+    attr = A_dim | Cdef_normal;
     break;
-
   case Glyph_class_uppercase:
     attr = A_normal | fg_bg(C_black, C_red);
     break;
-
   case Glyph_class_lowercase:
-
   case Glyph_class_movement:
-    attr = A_normal | fg_bg(C_blue, C_natural);
-//    attr = A_normal | fg_bg(C_red, C_natural);
- 
-    break;
   case Glyph_class_numeric:
-    attr = A_dim | Cdef_normal; // Non-locking input
-
+    attr = A_bold | Cdef_normal;
     break;
   case Glyph_class_bang:
     attr = A_bold | Cdef_normal;
@@ -143,21 +130,21 @@ static attr_t term_attrs_of_cell(Glyph g, Mark m) {
   if (gclass != Glyph_class_comment) {
     if ((m & (Mark_flag_lock | Mark_flag_input)) ==
         (Mark_flag_lock | Mark_flag_input)) {
-        attr = A_normal | Cdef_normal; // Standard locking input
-    } 
-    else if ((m & Mark_flag_input) == Mark_flag_input) {
-    attr = A_dim | Cdef_normal; // Non-locking input
-    } 
-    else if (m & Mark_flag_lock) {
-      
-      attr = A_dim | Cdef_normal;  // Locked only
+      // Standard locking input
+      attr = A_normal | Cdef_normal;
+    } else if ((m & Mark_flag_input) == Mark_flag_input) {
+      // Non-locking input
+      attr = A_normal | Cdef_normal;
+    } else if (m & Mark_flag_lock) {
+      // Locked only
+      attr = A_dim | Cdef_normal;
     }
   }
   if (m & Mark_flag_output) {
     attr = A_reverse;
   }
   if (m & Mark_flag_haste_input) {
-    attr = A_normal | fg_bg(C_red, C_natural);
+    attr = A_bold | fg_bg(C_red, C_natural);
   }
   return attr;
 }
@@ -225,7 +212,7 @@ staticni void draw_grid_cursor(WINDOW *win, int draw_y, int draw_x, int draw_h,
       Glyph beneath = gbuffer[cursor_y * field_w + cursor_x];
       char displayed;
       if (beneath == '.') {
-        displayed = is_playing ? '+' : '-';
+        displayed = is_playing ? '+' : '-';   //minimal style cursor
       } else {
         displayed = beneath;
       }
@@ -651,7 +638,7 @@ staticni void draw_oevent_list(WINDOW *win, Oevent_list const *oevent_list) {
     }
     case Oevent_type_osc_ints: {
       Oevent_osc_ints const *eo = &ev->osc_ints;
-      wprintw(win, "OSC\t%c\tcount: %d ", eo->glyph, eo->count, eo->count);
+      wprintw(win, "OSC\t%c\tcount: %d ", eo->glyph, eo->count);
       waddch(win, ACS_VLINE);
       for (Usz j = 0; j < eo->count; ++j) {
         wprintw(win, " %d", eo->numbers[j]);
@@ -2029,29 +2016,29 @@ enum {
 };
 
 static void push_main_menu(void) {
-  Qmenu *qm = qmenu_create(Main_menu_id);
+    Qmenu *qm = qmenu_create(Main_menu_id);
   qmenu_set_title(qm, "ORCA");
   qmenu_add_choice(qm, Main_menu_new, "New");
-  qmenu_add_choice(qm, Main_menu_open, "Open");
+  qmenu_add_choice(qm, Main_menu_open, "Open...");
   qmenu_add_choice(qm, Main_menu_save, "Save");
-  qmenu_add_choice(qm, Main_menu_save_as, "Save as");
+  qmenu_add_choice(qm, Main_menu_save_as, "Save As...");
   qmenu_add_spacer(qm);
-  qmenu_add_choice(qm, Main_menu_autofit_grid, "Automatic grid");
-  qmenu_add_choice(qm, Main_menu_cosmetics, "Appearance");
-  qmenu_add_choice(qm, Main_menu_set_grid_dims, "Grid settings");
+  qmenu_add_choice(qm, Main_menu_set_tempo, "Set BPM...");
+  qmenu_add_choice(qm, Main_menu_set_grid_dims, "Set Grid Size...");
+  qmenu_add_choice(qm, Main_menu_autofit_grid, "Auto-fit Grid");
   qmenu_add_spacer(qm);
-  qmenu_add_choice(qm, Main_menu_set_tempo, "BPM settings");
+  qmenu_add_choice(qm, Main_menu_osc, "OSC Output...");
 #ifdef FEAT_PORTMIDI
-  qmenu_add_choice(qm, Main_menu_choose_portmidi_output, "MIDI settings");
+  qmenu_add_choice(qm, Main_menu_choose_portmidi_output, "MIDI Output...");
 #endif
-  qmenu_add_choice(qm, Main_menu_playback, "CLOCK settings");
-  qmenu_add_choice(qm, Main_menu_osc, "OSC settings");
   qmenu_add_spacer(qm);
-  qmenu_add_choice(qm, Main_menu_opers_guide, "Operator list");
-  qmenu_add_choice(qm, Main_menu_controls, "Control list");
-  qmenu_add_choice(qm, Main_menu_midi_guide, "Midi CC list");
+  qmenu_add_choice(qm, Main_menu_playback, "Clock & Timing...");
+  qmenu_add_choice(qm, Main_menu_cosmetics, "Appearance...");
   qmenu_add_spacer(qm);
-  qmenu_add_choice(qm, Main_menu_about, "About ORCA");
+  qmenu_add_choice(qm, Main_menu_controls, "Controls...");
+  qmenu_add_choice(qm, Main_menu_opers_guide, "Operators...");
+  qmenu_add_choice(qm, Main_menu_midi_guide, "Midi CC list"); //custom cc list  
+  qmenu_add_choice(qm, Main_menu_about, "About ORCA...");
   qmenu_add_spacer(qm);
   qmenu_add_choice(qm, Main_menu_quit, "Quit");
   qmenu_push_to_nav(qm);
@@ -2067,16 +2054,16 @@ staticni void pop_qnav_if_main_menu(void) {
 static void push_confirm_new_file_menu(void) {
   Qmenu *qm = qmenu_create(Confirm_new_file_menu_id);
   qmenu_set_title(qm, "Are you sure?");
-    qmenu_add_choice(qm, Confirm_new_file_accept_id, "New file");
-    qmenu_add_choice(qm, Confirm_new_file_reject_id, "Cancel");
-   qmenu_push_to_nav(qm);
+  qmenu_add_choice(qm, Confirm_new_file_reject_id, "Cancel");
+  qmenu_add_choice(qm, Confirm_new_file_accept_id, "Create New File");
+  qmenu_push_to_nav(qm);
 }
 
 static void push_autofit_menu(void) {
   Qmenu *qm = qmenu_create(Autofit_menu_id);
-  qmenu_set_title(qm, "Automatic grid");
-  qmenu_add_choice(qm, Autofit_nicely_id, "With margins");
-  qmenu_add_choice(qm, Autofit_tightly_id, "Without margins");
+  qmenu_set_title(qm, "Auto-fit Grid");
+  qmenu_add_choice(qm, Autofit_nicely_id, "Nicely");
+  qmenu_add_choice(qm, Autofit_tightly_id, "Tightly");
   qmenu_push_to_nav(qm);
 }
 
@@ -2088,9 +2075,9 @@ enum {
 static void push_cosmetics_menu(void) {
   Qmenu *qm = qmenu_create(Cosmetics_menu_id);
   qmenu_set_title(qm, "Appearance");
-  qmenu_add_choice(qm, Cosmetics_soft_margins_id, "Margins");
-  qmenu_add_choice(qm, Cosmetics_grid_dots_id, "Dots");
-  qmenu_add_choice(qm, Cosmetics_grid_rulers_id, "Rulers");
+  qmenu_add_choice(qm, Cosmetics_soft_margins_id, "Margins...");
+  qmenu_add_choice(qm, Cosmetics_grid_dots_id, "Grid dots...");
+  qmenu_add_choice(qm, Cosmetics_grid_rulers_id, "Grid rulers...");
   qmenu_push_to_nav(qm);
 }
 static void push_soft_margins_form(int init_y, int init_x) {
@@ -2189,29 +2176,31 @@ static void push_controls_msg(void) {
     char const *input;
     char const *desc;
   };
-  static struct Ctrl_item items[] = {
-      {"Arrow Keys", "Cursor movement"},
+static struct Ctrl_item items[] = {
+      {"Ctrl+Q", "Quit"},
+      {"Arrow Keys", "Move Cursor"},
+      {"Ctrl+D or F1", "Open Main Menu"},
+      {"0-9, A-Z, a-z,", "Insert Character"},
+      {"! : % / = # *", NULL},
       {"Spacebar", "Play/Pause"},
-      {"Tab", "Insert mode"},
-      {"Ctrl+d", "Menu"},
-      {"Ctrl+z", "Undo"},
-      {"Ctrl+x", "Cut"},
-      {"Ctrl+c", "Copy"},
-      {"Ctrl+v", "Paste"},
-      {"Ctrl+s", "Save"},
-      {"Ctrl+f", "Advance frame"},
-      {"Ctrl+r", "Reset frame"},
-      {"Ctrl+p", "Midi CC list"},
-      {"Ctrl+q", "Quit"},
-      {"Shift+Arrow Keys", "Select block"},
-      //{"Alt+Arrow Keys", "Move block"},
-      {"'", "Block selection mode"},
-      {"~", "Block movement mode"},
-      {"Esc", "Normal mode"},
-      {"( ) + -", "Grid adjustment"},
-      {"[ ] { }", "Rulers adjustment"},
-      {"< >", "BPM adjustement"},
-      {"?", "Controls list"},
+      {"Ctrl+Z or Ctrl+U", "Undo"},
+      {"Ctrl+X", "Cut"},
+      {"Ctrl+C", "Copy"},
+      {"Ctrl+V", "Paste"},
+      {"Ctrl+S", "Save"},
+      {"Ctrl+F", "Frame Step Forward"},
+      {"Ctrl+R", "Reset Frame Number"},
+      {"Ctrl+I or Insert", "Append/Overwrite Mode"},
+      {"Ctrl+P", "Midi CC list"},
+      // {"/", "Key Trigger Mode"},
+      {"' (quote)", "Rectangle Selection Mode"},
+      {"Shift+Arrow Keys", "Adjust Rectangle Selection"},
+      {"Alt+Arrow Keys", "Slide Selection"},
+      {"` (grave) or ~", "Slide Selection Mode"},
+      {"Escape", "Return to Normal Mode or Deselect"},
+      {"( ) _ + [ ] { }", "Adjust Grid Size and Rulers"},
+      {"< and >", "Adjust BPM"},
+      {"?", "Controls (this message)"},
   };
   int w_input = 0;
   int w_desc = 0;
@@ -2246,14 +2235,12 @@ static void push_controls_msg(void) {
     }
   }
 }
-
 static void push_opers_guide_msg(void) {
   struct Guide_item {
     char glyph;
     char const *name;
     char const *desc;
   };
-  
   static struct Guide_item items[] = {
       {'A', "Add", "Outputs sum of inputs."},
       {'B', "suBtract", "Outputs subtraction of inputs."},
@@ -2450,8 +2437,8 @@ staticni void push_portmidi_output_device_menu(Midi_mode const *midi_mode) {
   }
   if (output_devices == 0) {
     qmenu_destroy(qm);
-    qmsg_printf_push("PortMidi device error",
-                     "No PortMidi device.");
+    qmsg_printf_push("No PortMidi Devices",
+                     "No PortMidi output devices found.");
     return;
   }
   if (has_cur_dev_id) {
@@ -2460,6 +2447,7 @@ staticni void push_portmidi_output_device_menu(Midi_mode const *midi_mode) {
   qmenu_push_to_nav(qm);
 }
 #endif
+
 staticni bool read_int(char const *str, int *out) {
   int a;
   int res = sscanf(str, "%d", &a);
@@ -2993,17 +2981,13 @@ staticni Tui_menus_result tui_drive_menus(Tui *t, int key) {
         case Main_menu_controls:
           push_controls_msg();
           break;
-          
         case Main_menu_opers_guide:
           push_opers_guide_msg();
           break;
-
-//Midi CC list
+          //Midi CC list
          case Main_menu_midi_guide:
           push_midi_guide_msg();
           break;
-          
-          
         case Main_menu_about:
           push_about_msg();
           break;
@@ -3753,7 +3737,7 @@ event_loop:;
   case ')':
     ged_resize_grid_relative(&t.ged, 0, 1);
     break;
-  case '-':
+  case '_':
     ged_resize_grid_relative(&t.ged, -1, 0);
     break;
   case '+':
@@ -3935,12 +3919,10 @@ event_loop:;
   case CTRL_PLUS('g'):
     push_opers_guide_msg();
     break;
-  
   // MIDI CC list
   case CTRL_PLUS('p'):
     push_midi_guide_msg();
     break;
-    
   case CTRL_PLUS('s'):
     tui_try_save(&t);
     break;
@@ -3960,6 +3942,9 @@ quit:
   qnav_deinit();
   if (cont_window)
     delwin(cont_window);
+#ifndef FEAT_NOMOUSE
+  printf("\033[?1003l\n"); // turn off console mouse events if they were active
+#endif
   printf("\033[?2004h\n"); // Tell terminal to not use bracketed paste
   endwin();
   ged_deinit(&t.ged);
