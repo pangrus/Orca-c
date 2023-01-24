@@ -13,11 +13,12 @@ Here you find the **C** implementation of the [ORCΛ](https://github.com/hundred
 
 # Quick Start for Debian
 
-```sh
+```
 sudo apt-get install git libncurses5-dev libncursesw5-dev libportmidi-dev
 git clone https://github.com/pangrus/Orca-c -b CustomCC
 cd Orca-c
-make          # Compile orca
-build/orca    # Run orca
+make         
+build/orca
 ```
+
 Forked from [hundredrabbits/Orca-c](https://github.com/hundredrabbits/Orca-c)
