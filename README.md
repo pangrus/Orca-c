@@ -11,11 +11,11 @@ Orca is a programming language designed to quickly create procedural sequencers,
 Here you find the **C** implementation of the [ORCΛ](https://github.com/hundredrabbits/Orca) language and tools. The livecoding environment for this C version runs in a terminal. It's designed to be power efficient. It can handle large files, even if your terminal is small.
 
 
-# Quick Start for Debian/Raspbian (Raspberry Pi)
+# Quick Start for Debian
 
 ```sh
 sudo apt-get install git libncurses5-dev libncursesw5-dev libportmidi-dev
-git clone https://github.com/hundredrabbits/Orca-c.git
+git clone https://github.com/pangrus/Orca-c -b CustomCC    
 cd Orca-c
 make          # Compile orca
 build/orca    # Run orca
