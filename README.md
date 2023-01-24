@@ -15,7 +15,7 @@ Here you find the **C** implementation of the [ORCΛ](https://github.com/hundred
 
 ```sh
 sudo apt-get install git libncurses5-dev libncursesw5-dev libportmidi-dev
-git clone https://github.com/pangrus/Orca-c -b CustomCC    
+git clone https://github.com/pangrus/Orca-c -b CustomCC
 cd Orca-c
 make          # Compile orca
 build/orca    # Run orca
