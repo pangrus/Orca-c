@@ -134,17 +134,17 @@ static attr_t term_attrs_of_cell(Glyph g, Mark m) {
       attr = A_bold | Cdef_normal;
     } else if ((m & Mark_flag_input) == Mark_flag_input) {
       // Non-locking input
-    attr = A_normal | fg_bg(C_cyan, C_natural);
+    attr = A_bold | fg_bg(C_cyan, C_natural);
     } else if (m & Mark_flag_lock) {
       // Locked only
-    attr = A_normal | fg_bg(C_cyan, C_natural);
+    attr = A_bold | fg_bg(C_cyan, C_natural);
     }
   }
   if (m & Mark_flag_output) {
     attr = A_reverse;
   }
   if (m & Mark_flag_haste_input) {
-    attr = A_normal | fg_bg(C_cyan, C_natural);
+    attr = A_bold | fg_bg(C_cyan, C_natural);
   }
   return attr;
 }
