@@ -110,18 +110,18 @@ static attr_t term_attrs_of_cell(Glyph g, Mark m) {
     attr = A_bold | fg_bg(C_black, C_natural);
     break;
   case Glyph_class_grid:
-    attr = A_bold | fg_bg(C_black, C_natural);
+    attr = A_normal | Cdef_normal;
     break;
   case Glyph_class_comment:
-    attr = A_dim | Cdef_normal;
+    attr = A_bold | Cdef_normal;
     break;
   case Glyph_class_uppercase:
-    attr = A_normal | fg_bg(C_black, C_red);
+    attr = A_normal | fg_bg(C_white, C_cyan);
     break;
   case Glyph_class_lowercase:
   case Glyph_class_movement:
   case Glyph_class_numeric:
-    attr = A_bold | Cdef_normal;
+    attr = A_normal | Cdef_normal;
     break;
   case Glyph_class_bang:
     attr = A_bold | Cdef_normal;
@@ -131,20 +131,20 @@ static attr_t term_attrs_of_cell(Glyph g, Mark m) {
     if ((m & (Mark_flag_lock | Mark_flag_input)) ==
         (Mark_flag_lock | Mark_flag_input)) {
       // Standard locking input
-      attr = A_normal | Cdef_normal;
+      attr = A_bold | Cdef_normal;
     } else if ((m & Mark_flag_input) == Mark_flag_input) {
       // Non-locking input
-      attr = A_normal | Cdef_normal;
+    attr = A_normal | fg_bg(C_cyan, C_natural);
     } else if (m & Mark_flag_lock) {
       // Locked only
-      attr = A_dim | Cdef_normal;
+    attr = A_normal | fg_bg(C_cyan, C_natural);
     }
   }
   if (m & Mark_flag_output) {
     attr = A_reverse;
   }
   if (m & Mark_flag_haste_input) {
-    attr = A_bold | fg_bg(C_red, C_natural);
+    attr = A_normal | fg_bg(C_cyan, C_natural);
   }
   return attr;
 }
@@ -204,7 +204,7 @@ staticni void draw_grid_cursor(WINDOW *win, int draw_y, int draw_x, int draw_h,
     return;
   if (draw_y >= draw_h || draw_x >= draw_w)
     return;
-  attr_t const curs_attr = A_reverse | A_normal | fg_bg(C_yellow, C_natural);
+  attr_t const curs_attr = A_reverse | A_normal | fg_bg(C_cyan, C_natural);
   if (offset_y <= cursor_y && offset_x <= cursor_x) {
     Usz cdraw_y = cursor_y - offset_y + (Usz)draw_y;
     Usz cdraw_x = cursor_x - offset_x + (Usz)draw_x;
