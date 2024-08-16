@@ -107,7 +107,7 @@ static attr_t term_attrs_of_cell(Glyph g, Mark m) {
   attr_t attr = A_normal;
   switch (gclass) {
   case Glyph_class_unknown:
-    attr = A_bold | fg_bg(C_black, C_natural);
+    attr = A_normal | fg_bg(C_black, C_natural);
     break;
   case Glyph_class_grid:
     attr = A_normal | Cdef_normal;
@@ -116,7 +116,7 @@ static attr_t term_attrs_of_cell(Glyph g, Mark m) {
     attr = A_bold | Cdef_normal;
     break;
   case Glyph_class_uppercase:
-    attr = A_normal | fg_bg(C_white, C_cyan);
+    attr = A_bold | fg_bg(C_white, C_cyan);
     break;
   case Glyph_class_lowercase:
   case Glyph_class_movement:
@@ -134,10 +134,10 @@ static attr_t term_attrs_of_cell(Glyph g, Mark m) {
       attr = A_bold | Cdef_normal;
     } else if ((m & Mark_flag_input) == Mark_flag_input) {
       // Non-locking input
-    attr = A_bold | fg_bg(C_cyan, C_natural);
+      attr = A_bold | fg_bg(C_cyan, C_natural);
     } else if (m & Mark_flag_lock) {
       // Locked only
-    attr = A_bold | fg_bg(C_cyan, C_natural);
+      attr = A_bold | fg_bg(C_cyan, C_natural);
     }
   }
   if (m & Mark_flag_output) {
@@ -204,7 +204,7 @@ staticni void draw_grid_cursor(WINDOW *win, int draw_y, int draw_x, int draw_h,
     return;
   if (draw_y >= draw_h || draw_x >= draw_w)
     return;
-  attr_t const curs_attr = A_reverse | A_normal | fg_bg(C_cyan, C_natural);
+  attr_t const curs_attr = A_reverse | A_normal | fg_bg(C_red, C_natural);
   if (offset_y <= cursor_y && offset_x <= cursor_x) {
     Usz cdraw_y = cursor_y - offset_y + (Usz)draw_y;
     Usz cdraw_x = cursor_x - offset_x + (Usz)draw_x;
@@ -212,7 +212,7 @@ staticni void draw_grid_cursor(WINDOW *win, int draw_y, int draw_x, int draw_h,
       Glyph beneath = gbuffer[cursor_y * field_w + cursor_x];
       char displayed;
       if (beneath == '.') {
-        displayed = is_playing ? '+' : '-';   //minimal style cursor
+        displayed = is_playing ? '+' : '-'; //minimal style cursor
       } else {
         displayed = beneath;
       }
@@ -2016,7 +2016,7 @@ enum {
 };
 
 static void push_main_menu(void) {
-    Qmenu *qm = qmenu_create(Main_menu_id);
+  Qmenu *qm = qmenu_create(Main_menu_id);
   qmenu_set_title(qm, "ORCA");
   qmenu_add_choice(qm, Main_menu_new, "New");
   qmenu_add_choice(qm, Main_menu_open, "Open...");
@@ -2037,7 +2037,7 @@ static void push_main_menu(void) {
   qmenu_add_spacer(qm);
   qmenu_add_choice(qm, Main_menu_controls, "Controls...");
   qmenu_add_choice(qm, Main_menu_opers_guide, "Operators...");
-  qmenu_add_choice(qm, Main_menu_midi_guide, "Midi CC list"); //custom cc list  
+  qmenu_add_choice(qm, Main_menu_midi_guide, "Midi CC list"); //custom cc list
   qmenu_add_choice(qm, Main_menu_about, "About ORCA...");
   qmenu_add_spacer(qm);
   qmenu_add_choice(qm, Main_menu_quit, "Quit");
@@ -2176,7 +2176,7 @@ static void push_controls_msg(void) {
     char const *input;
     char const *desc;
   };
-static struct Ctrl_item items[] = {
+  static struct Ctrl_item items[] = {
       {"Ctrl+Q", "Quit"},
       {"Arrow Keys", "Move Cursor"},
       {"Ctrl+D or F1", "Open Main Menu"},
@@ -2304,53 +2304,52 @@ static void push_opers_guide_msg(void) {
   }
 }
 
-
 static void push_midi_guide_msg(void) {
   struct Guide_item {
     char glyph;
     char const *name;
     char const *desc;
   };
-  
 
   // Midi CC list guide
+
   static struct Guide_item items[] = {
-      {'0', "00", "CC80  Macro knob 1 (Circuit)"},
-      {'1', "01", "CC81  Macro knob 2 (Circuit)"},
-      {'2', "02", "CC82  Macro knob 3 (Circuit)"},
-      {'3', "03", "CC83  Macro knob 4 (Circuit)"},
-      {'4', "04", "CC84  Macro knob 5 (Circuit)"},
-      {'5', "05", "CC85  Macro knob 6 (Circuit)"},
-      {'6', "06", "CC86  Macro knob 7 (Circuit)"},
-      {'7', "07", "CC87  Macro knob 8 (Circuit)"},
-      {'8', "08", "CC21  Osc 1 wavetable index (Circuit)"},
-      {'9', "09", "CC31  Osc 2 wavetable index (Circuit)"},
-      {'A', "10", "CC16  Accent (TB-03)"},
-      {'B', "11", "CC102 Slide (TB-03)"},
-      {'C', "12", "CC74  Cutoff frequency"},
-      {'D', "13", "CC18  Delay time (TB-03)"},
-      {'E', "14", "CC12  Envelope modulation (TB-03)"},
-      {'F', "15", "CC19  Delay feedback (TB-03)"},
-      {'G', "16", "CC14  Drum 1 pitch (Circuit)"},
-      {'H', "17", "CC34  Drum 2 pitch (Circuit)"},
-      {'I', "18", "CC46  Drum 3 pitch (Circuit)"},
-      {'J', "19", "CC55  Drum 4 pitch (Circuit)"},
-      {'K', "20", "CC15  Drum 1 decay (Circuit)"},
-      {'L', "21", "CC40  Drum 2 decay (Circuit)"},
-      {'M', "22", "CC47  Drum 3 decay (Circuit)"},
-      {'N', "23", "CC57  Drum 4 decay (Circuit)"},
-      {'O', "24", "CC17  Overdrive (TB-03)"},
-      {'P', "25", "CC18  Delay time (TB-03)"},
-      {'Q', "26", "CC3   Polyphony mode"},
-      {'R', "27", "CC71  Resonance"},
-      {'S', "28", "CC8   Drum 1 sample select (Circuit)"},
-      {'T', "29", "CC18  Drum 2 sample select (Circuit)"} ,
-      {'U', "30", "CC44  Drum 3 sample select (Circuit)"},
-      {'V', "31", "CC50  Drum 4 sample select (Circuit)"},
-      {'W', "32", "CC73  Attack"},
-      {'X', "33", "CC75  Decay"},
-      {'Y', "34", "CC70  Sustain"},
-      {'Z', "35", "CC72  Release"},
+      {'0', "00", "CC 00"},
+      {'1', "01", "CC 01"},
+      {'2', "02", "CC 02"},
+      {'3', "03", "CC 03"},
+      {'4', "04", "CC 04"},
+      {'5', "05", "CC 05"},
+      {'6', "06", "CC 06"},
+      {'7', "07", "CC 07"},
+      {'8', "08", "CC 08"},
+      {'9', "09", "CC 09"},
+      {'A', "10", "CC 10"},
+      {'B', "11", "CC 11"},
+      {'C', "12", "CC 74 Cutoff"},
+      {'D', "13", "CC 13"},
+      {'E', "14", "CC 11 Expression"},
+      {'F', "15", "CC 15"},
+      {'G', "16", "CC 16"},
+      {'H', "17", "CC 17"},
+      {'I', "18", "CC 18"},
+      {'J', "19", "CC 19"},
+      {'K', "20", "CC 20"},
+      {'L', "21", "CC 21"},
+      {'M', "22", "CC 01 Modulation wheel"},
+      {'N', "23", "CC 23"},
+      {'O', "24", "CC 24"},
+      {'P', "25", "CC 10 Pan"},
+      {'Q', "26", "CC 26"},
+      {'R', "27", "CC 71 Resonance"},
+      {'S', "28", "CC 65 Slide (Portamento)"},
+      {'T', "29", "CC 29"},
+      {'U', "30", "CC 30"},
+      {'V', "31", "CC 07 Volume"},
+      {'W', "32", "CC 32"},
+      {'X', "33", "CC 33"},
+      {'Y', "34", "CC 34"},
+      {'Z', "35", "CC 35"},
   };
 
   int w_desc = 0;
@@ -2985,7 +2984,7 @@ staticni Tui_menus_result tui_drive_menus(Tui *t, int key) {
           push_opers_guide_msg();
           break;
           //Midi CC list
-         case Main_menu_midi_guide:
+        case Main_menu_midi_guide:
           push_midi_guide_msg();
           break;
         case Main_menu_about:

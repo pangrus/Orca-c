@@ -237,52 +237,125 @@ BEGIN_OPERATOR(midicc)
   Glyph channel_g = PEEK(0, 1);
   Glyph control_g = PEEK(0, 2);
 
- // Custom MIDI CC management
-  switch (index_of(control_g)){
-    case 0: control_g = 80; break;  //0 - Macro 1
-    case 1: control_g = 81; break;  //1 - Macro 2
-    case 2: control_g = 82; break;  //2 - Macro 3
-    case 3: control_g = 83; break;  //3 - Macro 4
-    case 4: control_g = 84; break;  //4 - Macro 5
-    case 5: control_g = 85; break;  //5 - Macro 6
-    case 6: control_g = 86; break;  //6 - Macro 7
-    case 7: control_g = 87; break;  //7 - Macro 8
-
-    case 8: control_g = 21; break;  //8 - Osc1 wave index 
-    case 9: control_g = 31; break;  //9 - Osc2 wave index 
-  
-    case 10: control_g = 16; break;  //A - Accent
-    case 11: control_g = 102; break; //B - Slide 
-    case 12: control_g = 74; break;  //C - Cutoff
-    case 13: control_g = 18; break;  //D - Delay time 
-    case 14: control_g = 12; break;  //E - Envelope modulation
-    case 15: control_g = 19; break;  //F - Delay Feedback 
-
-    case 16: control_g = 14; break;  //G - Drum 1 pitch
-    case 17: control_g = 34; break;  //H - Drum 2 pitch
-    case 18: control_g = 46; break;  //I - Drum 3 pitch
-    case 19: control_g = 55; break;  //J - Drum 4 pitch
-
-    case 20: control_g = 15; break;  //K - Drum 1 decay 
-    case 21: control_g = 40; break;  //L - Drum 2 decay
-    case 22: control_g = 47; break;  //M - Drum 3 decay
-    case 23: control_g = 57; break;  //N - Drum 4 decay
-
-    case 24: control_g = 17; break;  //O - Overdrive 
-    case 25: control_g = 18; break;  //P - Delay time
-
-    case 26: control_g = 3;  break;  //Q - Polyphony mode 
-    case 27: control_g = 71; break;  //R - Resonance 
-    
-    case 28: control_g = 8;  break;  //S - Drum 1 sample select
-    case 29: control_g = 18; break;  //T - Drum 2 sample select
-    case 30: control_g = 44; break;  //U - Drum 3 sample select
-    case 31: control_g = 50; break;  //V - Drum 4 sample select
-        
-    case 32: control_g = 73; break;  //W - Attack
-    case 33: control_g = 75; break;  //X - Decay
-    case 34: control_g = 70; break;  //Y - Sustain 
-    case 35: control_g = 72; break;  //Z - Release
+  /* 
+ Default MIDI CC management, the most commonly used CC are mapped to the following ORCA letters:
+ C = CC 74 Cutoff (Brightness)
+ E = CC 11 Expression
+ M = CC 01 Modulation wheel
+ P = CC 10 Pan
+ R = CC 71 Resonance
+ S = CC 65 Slide (Portamento)
+ V = CC 07 Volume
+*/
+  switch (index_of(control_g)) {
+  case 0:
+    control_g = 0;
+    break; //0 - CC 00
+  case 1:
+    control_g = 1;
+    break; //1 - CC 01
+  case 2:
+    control_g = 2;
+    break; //2 - CC 02
+  case 3:
+    control_g = 3;
+    break; //3 - CC 03
+  case 4:
+    control_g = 4;
+    break; //4 - CC 04
+  case 5:
+    control_g = 5;
+    break; //5 - CC 05
+  case 6:
+    control_g = 6;
+    break; //6 - CC 06
+  case 7:
+    control_g = 7;
+    break; //7 - CC 07
+  case 8:
+    control_g = 8;
+    break; //8 - CC 08
+  case 9:
+    control_g = 9;
+    break; //9 - CC 09
+  case 10:
+    control_g = 10;
+    break; //A - CC 10
+  case 11:
+    control_g = 11;
+    break; //B - CC 11
+  case 12:
+    control_g = 74;
+    break; //C - CC 74 Cutoff
+  case 13:
+    control_g = 13;
+    break; //D - CC 13
+  case 14:
+    control_g = 11;
+    break; //E - CC 11 Expression
+  case 15:
+    control_g = 15;
+    break; //F - CC 15
+  case 16:
+    control_g = 16;
+    break; //G - CC 16
+  case 17:
+    control_g = 17;
+    break; //H - CC 17
+  case 18:
+    control_g = 18;
+    break; //I - CC 18
+  case 19:
+    control_g = 19;
+    break; //J - CC 19
+  case 20:
+    control_g = 20;
+    break; //K - CC 20
+  case 21:
+    control_g = 21;
+    break; //L - CC 21
+  case 22:
+    control_g = 1;
+    break; //M - CC 01 Modulation wheel
+  case 23:
+    control_g = 23;
+    break; //N - CC 21
+  case 24:
+    control_g = 24;
+    break; //O - CC 24
+  case 25:
+    control_g = 10;
+    break; //P - CC 10 Pan
+  case 26:
+    control_g = 26;
+    break; //Q - CC 26
+  case 27:
+    control_g = 71;
+    break; //R - CC 71 Resonance
+  case 28:
+    control_g = 65;
+    break; //S - CC 65 Slide (Portamento)
+  case 29:
+    control_g = 29;
+    break; //T - CC 29
+  case 30:
+    control_g = 30;
+    break; //U - CC 30
+  case 31:
+    control_g = 7;
+    break; //V - CC 07 Volume
+  case 32:
+    control_g = 32;
+    break; //W - CC 32
+  case 33:
+    control_g = 33;
+    break; //X - CC 33
+  case 34:
+    control_g = 34;
+    break; //Y - CC 34
+  case 35:
+    control_g = 35;
+    break; //Z - CC 35
   }
 
   Glyph value_g = PEEK(0, 3);
@@ -298,10 +371,13 @@ BEGIN_OPERATOR(midicc)
   oe->channel = (U8)channel;
   oe->control = (U8)control_g;
   // drum 1 and drum 2 sample select
-  if (control_g == 8 || control_g == 18) oe->value = (U8)(index_of(value_g)); 
+  if (control_g == 8 || control_g == 18)
+    oe->value = (U8)(index_of(value_g));
   // drum 3 and drum 4 sample select
-  else if (control_g == 44 || control_g == 50) oe->value = (U8)(index_of(value_g) + 32); 
-  else oe->value = (U8)(index_of(value_g) * 127 / 35); // 0~35 -> 0~127
+  else if (control_g == 44 || control_g == 50)
+    oe->value = (U8)(index_of(value_g) + 32);
+  else
+    oe->value = (U8)(index_of(value_g) * 127 / 35); // 0~35 -> 0~127
 END_OPERATOR
 
 BEGIN_OPERATOR(comment)
